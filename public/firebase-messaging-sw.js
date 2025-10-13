@@ -1,4 +1,4 @@
-// public/firebase-messaging-sw.js - ESLINT-FIXED SERVICE WORKER
+// public/firebase-messaging-sw.js
 /* eslint-env serviceworker */
 /* eslint-disable no-undef, no-restricted-globals */
 
@@ -8,12 +8,12 @@ importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-comp
 
 // Firebase config (same as your main config)
 const firebaseConfig = {
-  apiKey: "AIzaSyBNE6vcHc-9aPfb-SkxKHzpYnO6tF5L83E",
-  authDomain: "jansahyog-59349.firebaseapp.com",
-  projectId: "jansahyog-59349",
-  storageBucket: "jansahyog-59349.firebasestorage.app",
-  messagingSenderId: "601117233933",
-  appId: "1:601117233933:web:5c43d2458bf3d6d8f9d644",
+  apiKey: "AIzaSyDUYJj89DBPn9V7yXWLH-shkJTp9nBmZr8",
+  authDomain: "dermascan-61650.firebaseapp.com",
+  projectId: "dermascan-61650",
+  storageBucket: "dermascan-61650.firebasestorage.app",
+  messagingSenderId: "1088919928349",
+  appId: "1:1088919928349:web:20ad8d3db9cd23845690f4",
 };
 
 // Initialize Firebase in service worker
@@ -27,7 +27,7 @@ messaging.onBackgroundMessage((payload) => {
   console.log('📱 Background message received:', payload);
   
   // Extract notification data
-  const notificationTitle = payload.notification?.title || payload.data?.title || 'JanSahyog Update';
+  const notificationTitle = payload.notification?.title || payload.data?.title || 'DermaScan Update';
   const notificationBody = payload.notification?.body || payload.data?.body || 'You have a new update';
   const notificationIcon = payload.notification?.icon || payload.data?.icon || '/favicon.ico';
   const notificationData = payload.data || {};
@@ -36,7 +36,7 @@ messaging.onBackgroundMessage((payload) => {
     body: notificationBody,
     icon: notificationIcon,
     badge: '/favicon.ico',
-    tag: 'jansahyog-notification',
+    tag: 'dermascan-notification',
     requireInteraction: false,
     vibrate: [200, 100, 200],
     data: notificationData,
@@ -111,4 +111,4 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(clients.claim());
 });
 
-console.log('🚀 JanSahyog service worker loaded successfully');
+console.log('🚀 DermaScan service worker loaded successfully');

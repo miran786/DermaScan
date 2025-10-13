@@ -24,8 +24,11 @@ import {
   MedicalInformation as MedicalInformationIcon,
   ArrowForward as ArrowForwardIcon,
 } from '@mui/icons-material';
+import { auth, db, storage } from '../firebase/firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { useNavigate } from 'react-router-dom';
 
-// --- Styled Components for a Custom Look ---
 const UploadBox = styled(Box)(({ theme }) => ({
   border: `2px dashed ${theme.palette.primary.light}`,
   borderRadius: theme.shape.borderRadius,
@@ -55,8 +58,6 @@ const ResultCard = styled(Card)(({ theme, isMalignant }) => ({
   transform: 'translateY(20px)',
 }));
 
-
-// --- Main Component ---
 const DermaScanHome = () => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [previewUrl, setPreviewUrl] = useState('');
@@ -64,6 +65,7 @@ const DermaScanHome = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const fileInputRef = useRef(null);
+  const navigate = useNavigate();
 
   const handleImageChange = (event) => {
     const file = event.target.files[0];
@@ -97,7 +99,21 @@ const DermaScanHome = () => {
         is_malignant: false,
       };
       setResult(mockData);
-      // Animate the result card into view
+
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        const storageRef = ref(storage, `scans/${currentUser.uid}/${Date.now()}-${selectedImage.name}`);
+        const uploadTask = await uploadBytes(storageRef, selectedImage);
+        const downloadURL = await getDownloadURL(uploadTask.ref);
+
+        const scansCollectionRef = collection(db, 'users', currentUser.uid, 'scans');
+        await addDoc(scansCollectionRef, {
+          createdAt: serverTimestamp(),
+          imageUrl: downloadURL,
+          result: mockData,
+        });
+      }
+
       setTimeout(() => {
         const resultCard = document.getElementById('result-card');
         if (resultCard) {
@@ -108,6 +124,7 @@ const DermaScanHome = () => {
 
     } catch (err) {
       setError('An unexpected error occurred during analysis.');
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -133,7 +150,6 @@ const DermaScanHome = () => {
           pointerEvents: 'none'
         }
     }}>
-      {/* Header */}
       <Container component="header" sx={{ py: 4, position: 'relative', zIndex: 1 }}>
         <Box display="flex" alignItems="center" justifyContent="center">
           <MedicalInformationIcon color="primary" sx={{ fontSize: 48, mr: 2 }} />
@@ -144,7 +160,6 @@ const DermaScanHome = () => {
       </Container>
       
       <Container sx={{ position: 'relative', zIndex: 1 }}>
-        {/* Hero Section */}
         <Box textAlign="center" py={{ xs: 6, md: 10 }}>
           <Chip 
             label="Powered by Deep Learning" 
@@ -166,7 +181,6 @@ const DermaScanHome = () => {
           </Typography>
         </Box>
 
-        {/* How It Works Section */}
         <Box my={{ xs: 6, md: 10 }}>
             <Typography variant="h4" textAlign="center" fontWeight="bold" gutterBottom sx={{ mb: 5 }}>
                 Simple, Fast, and Insightful
@@ -180,7 +194,6 @@ const DermaScanHome = () => {
             </Stepper>
         </Box>
         
-        {/* Main Analysis Area */}
         <Paper elevation={12} sx={{ 
           p: { xs: 3, md: 5 }, 
           borderRadius: 2, 
@@ -239,7 +252,6 @@ const DermaScanHome = () => {
           </Grid>
         </Paper>
 
-        {/* Disclaimer */}
         <Alert 
           severity="warning" 
           sx={{ 
@@ -257,7 +269,6 @@ const DermaScanHome = () => {
           </Typography>
         </Alert>
 
-        {/* Footer */}
         <Box component="footer" sx={{ py: 8, mt: 8, textAlign: 'center', position: 'relative', zIndex: 1 }}>
           <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
             &copy; {new Date().getFullYear()} DermaScan. AI for skin health awareness.

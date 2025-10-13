@@ -3,13 +3,13 @@ import { ThemeProvider, createTheme, responsiveFontSizes } from '@mui/material/s
 import CssBaseline from '@mui/material/CssBaseline';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { auth } from './firebase/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from './firebase/firebase';
 
 // Import Pages and Components
 import DermaScanHome from './pages/DermaScanHome';
 import ProfilePage from './pages/ProfilePage';
 import ScanHistoryPage from './pages/ScanHistoryPage';
-import LibraryPage from './pages/LibraryPage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import Navbar from './components/Navbar';
@@ -73,33 +73,7 @@ let lightTheme = createTheme({
   shape: {
     borderRadius: 12
   },
-  shadows: [
-    'none',
-    '0px 2px 4px rgba(0,0,0,0.1)',
-    '0px 4px 8px rgba(0,0,0,0.12)',
-    '0px 8px 16px rgba(0,0,0,0.14)',
-    '0px 12px 24px rgba(0,0,0,0.16)',
-    '0px 16px 32px rgba(0,0,0,0.18)',
-    '0px 20px 40px rgba(0,0,0,0.20)',
-    '0px 24px 48px rgba(0,0,0,0.22)',
-    '0px 28px 56px rgba(0,0,0,0.24)',
-    '0px 32px 64px rgba(0,0,0,0.26)',
-    '0px 36px 72px rgba(0,0,0,0.28)',
-    '0px 40px 80px rgba(0,0,0,0.30)',
-    '0px 44px 88px rgba(0,0,0,0.32)',
-    '0px 48px 96px rgba(0,0,0,0.34)',
-    '0px 52px 104px rgba(0,0,0,0.36)',
-    '0px 56px 112px rgba(0,0,0,0.38)',
-    '0px 60px 120px rgba(0,0,0,0.40)',
-    '0px 64px 128px rgba(0,0,0,0.42)',
-    '0px 68px 136px rgba(0,0,0,0.44)',
-    '0px 72px 144px rgba(0,0,0,0.46)',
-    '0px 76px 152px rgba(0,0,0,0.48)',
-    '0px 80px 160px rgba(0,0,0,0.50)',
-    '0px 84px 168px rgba(0,0,0,0.52)',
-    '0px 88px 176px rgba(0,0,0,0.54)',
-    '0px 92px 184px rgba(0,0,0,0.56)'
-  ],
+  shadows: Array(25).fill('none'),
   components: {
     MuiButton: {
       styleOverrides: {
@@ -141,12 +115,25 @@ let lightTheme = createTheme({
 lightTheme = responsiveFontSizes(lightTheme);
 
 function App() {
-  const [user, setUser] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        // User is signed in, now fetch their profile from Firestore
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists()) {
+          setUserProfile({ uid: user.uid, ...userDoc.data() });
+        } else {
+          // Handle case where user exists in Auth but not Firestore
+          setUserProfile(user); // Fallback to auth user object
+        }
+      } else {
+        // User is signed out
+        setUserProfile(null);
+      }
       setLoading(false);
     });
     return () => unsubscribe();
@@ -173,7 +160,7 @@ function App() {
           minHeight: '100vh',
           backgroundImage: 'linear-gradient(135deg, #1e1e2f 0%, #2b2b3d 50%, #1e1e2f 100%)'
         }}>
-          <Navbar user={user} onLogout={handleLogout} />
+          <Navbar user={userProfile} onLogout={handleLogout} />
           <Box sx={{ 
             position: 'relative',
             '&::before': {
@@ -188,12 +175,11 @@ function App() {
             }
           }}>
             <Routes>
-              <Route path="/" element={<DermaScanHome />} />
-              <Route path="/library" element={<LibraryPage />} />
-              <Route path="/profile" element={user ? <ProfilePage /> : <Navigate to="/login" />} />
-              <Route path="/history" element={user ? <ScanHistoryPage /> : <Navigate to="/login" />} />
-              <Route path="/login" element={user ? <Navigate to="/history" /> : <LoginPage />} />
-              <Route path="/signup" element={user ? <Navigate to="/history" /> : <SignupPage />} />
+              <Route path="/" element={<DermaScanHome userProfile={userProfile} />} />
+              <Route path="/profile" element={userProfile ? <ProfilePage /> : <Navigate to="/login" />} />
+              <Route path="/history" element={userProfile ? <ScanHistoryPage userProfile={userProfile} /> : <Navigate to="/login" />} />
+              <Route path="/login" element={userProfile ? <Navigate to="/history" /> : <LoginPage />} />
+              <Route path="/signup" element={userProfile ? <Navigate to="/history" /> : <SignupPage />} />
             </Routes>
           </Box>
         </Box>
@@ -203,4 +189,3 @@ function App() {
 }
 
 export default App;
-

@@ -38,22 +38,6 @@ const Navbar = ({ user, onLogout }) => {
             Derma<span style={{ color: '#34495e' }}>Scan</span>
           </Typography>
 
-          {/* Link to Library page for all users */}
-          <Button 
-            component={NavLink} 
-            to="/library" 
-            sx={{ 
-              color: 'text.primary',
-              fontWeight: 500,
-              mr: 2,
-              '&:hover': {
-                backgroundColor: 'rgba(52, 73, 94, 0.1)'
-              }
-            }}
-          >
-            Library
-          </Button>
-
           {isAuthenticated ? (
             <Box display="flex" alignItems="center" gap={1}>
               <Button 
