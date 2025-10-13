@@ -9,7 +9,6 @@ import {
   TextField,
   Button,
   Switch,
-  FormControlLabel,
   Divider,
   List,
   ListItem,
@@ -27,7 +26,6 @@ import {
   IconButton
 } from '@mui/material';
 import {
-  Person as PersonIcon,
   Notifications as NotificationsIcon,
   Lock as LockIcon,
   DeleteForever as DeleteIcon,
@@ -169,25 +167,76 @@ const ProfilePage = () => {
   }
 
   return (
-    <Box sx={{ py: 5 }}>
+    <Box sx={{ py: 8 }}>
       <Container maxWidth="lg">
-        <Typography variant="h3" fontWeight="bold" gutterBottom>Account Settings</Typography>
+        <Box textAlign="center" mb={6}>
+          <Typography variant="h3" fontWeight="bold" gutterBottom sx={{ color: 'text.primary' }}>
+            Account Settings
+          </Typography>
+        </Box>
         <Grid container spacing={4} mt={2}>
           <Grid item xs={12} md={4}>
-            <Paper elevation={8} sx={{ p: 3, textAlign: 'center', borderRadius: 4 }}>
-              <Avatar sx={{ width: 100, height: 100, mx: 'auto', mb: 2, bgcolor: 'primary.main', fontSize: '3rem' }}>
+            <Paper 
+              elevation={8} 
+              sx={{ 
+                p: 4, 
+                textAlign: 'center', 
+                borderRadius: 2,
+                backgroundColor: 'background.paper',
+                transition: 'all 0.3s ease',
+                '&:hover': {
+                  transform: 'translateY(-2px)',
+                  boxShadow: '0 7px 14px rgba(50, 50, 93, 0.1), 0 3px 6px rgba(0, 0, 0, 0.08)'
+                }
+              }}
+            >
+              <Avatar sx={{ 
+                width: 120, 
+                height: 120, 
+                mx: 'auto', 
+                mb: 3, 
+                bgcolor: 'primary.main', 
+                fontSize: '3.5rem',
+                fontWeight: 'bold'
+              }}>
                 {profile.displayName ? profile.displayName.charAt(0).toUpperCase() : '?'}
               </Avatar>
-              <Typography variant="h5" fontWeight="bold">{profile.displayName}</Typography>
-              <Typography color="text.secondary">{profile.email}</Typography>
+              <Typography variant="h5" fontWeight="bold" sx={{ color: 'text.primary', mb: 1 }}>
+                {profile.displayName}
+              </Typography>
+              <Typography color="text.secondary" sx={{ fontSize: '0.95rem' }}>
+                {profile.email}
+              </Typography>
             </Paper>
           </Grid>
 
           <Grid item xs={12} md={8}>
-            <Paper elevation={8} sx={{ p: 4, borderRadius: 4 }}>
-              <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-                <Typography variant="h6" fontWeight="bold">Personal Information</Typography>
-                <Button variant={editMode ? "contained" : "outlined"} startIcon={editMode ? <SaveIcon /> : <EditIcon />} onClick={() => editMode ? handleSaveChanges() : setEditMode(true)}>
+            <Paper 
+              elevation={8} 
+              sx={{ 
+                p: 4, 
+                borderRadius: 2,
+                backgroundColor: 'background.paper',
+                transition: 'all 0.3s ease',
+                '&:hover': {
+                  transform: 'translateY(-2px)',
+                  boxShadow: '0 7px 14px rgba(50, 50, 93, 0.1), 0 3px 6px rgba(0, 0, 0, 0.08)'
+                }
+              }}
+            >
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
+                <Typography variant="h6" fontWeight="bold" sx={{ color: 'text.primary' }}>
+                  Personal Information
+                </Typography>
+                <Button 
+                  variant={editMode ? "contained" : "outlined"} 
+                  startIcon={editMode ? <SaveIcon /> : <EditIcon />} 
+                  onClick={() => editMode ? handleSaveChanges() : setEditMode(true)}
+                  sx={{
+                    fontWeight: 600,
+                    px: 3
+                  }}
+                >
                   {editMode ? "Save Changes" : "Edit Profile"}
                 </Button>
               </Box>

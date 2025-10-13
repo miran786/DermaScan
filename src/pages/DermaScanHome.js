@@ -9,7 +9,6 @@ import {
   Paper,
   CircularProgress,
   Alert,
-  Avatar,
   Card,
   CardContent,
   Chip,
@@ -21,9 +20,6 @@ import {
 import { styled } from '@mui/material/styles';
 import {
   UploadFile as UploadFileIcon,
-  Biotech as BiotechIcon,
-  VerifiedUser as VerifiedUserIcon,
-  Speed as SpeedIcon,
   CloudUpload as CloudUploadIcon,
   MedicalInformation as MedicalInformationIcon,
   ArrowForward as ArrowForwardIcon,
@@ -31,25 +27,28 @@ import {
 
 // --- Styled Components for a Custom Look ---
 const UploadBox = styled(Box)(({ theme }) => ({
-  border: `2px dashed ${theme.palette.grey[700]}`,
-  borderRadius: theme.shape.borderRadius * 2,
-  padding: theme.spacing(3),
+  border: `2px dashed ${theme.palette.primary.light}`,
+  borderRadius: theme.shape.borderRadius,
+  padding: theme.spacing(4),
   minHeight: 350,
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
   justifyContent: 'center',
-  backgroundColor: theme.palette.background.paper,
+  backgroundColor: 'rgba(52, 73, 94, 0.03)',
   textAlign: 'center',
-  transition: 'background-color 0.3s, border-color 0.3s',
+  transition: 'all 0.3s ease',
+  cursor: 'pointer',
   '&:hover': {
     borderColor: theme.palette.primary.main,
-    backgroundColor: 'rgba(0, 188, 212, 0.05)',
+    backgroundColor: 'rgba(52, 73, 94, 0.08)',
+    transform: 'translateY(-2px)',
+    boxShadow: '0 7px 14px rgba(50, 50, 93, 0.1), 0 3px 6px rgba(0, 0, 0, 0.08)',
   },
 }));
 
 const ResultCard = styled(Card)(({ theme, isMalignant }) => ({
-  backgroundColor: isMalignant ? 'rgba(255, 111, 97, 0.1)' : 'rgba(0, 188, 212, 0.1)',
+  backgroundColor: isMalignant ? 'rgba(231, 76, 60, 0.1)' : 'rgba(52, 73, 94, 0.1)',
   borderLeft: `5px solid ${isMalignant ? theme.palette.secondary.main : theme.palette.primary.main}`,
   transition: 'opacity 0.5s ease-in-out, transform 0.5s ease-in-out',
   opacity: 0,
@@ -120,26 +119,49 @@ const DermaScanHome = () => {
 
   return (
     <Box sx={{
-        background: `linear-gradient(180deg, ${'#121212'} 0%, #1e1e1e 30%, #121212 100%)`,
+        background: `linear-gradient(135deg, #1e1e2f 0%, #2b2b3d 50%, #1e1e2f 100%)`,
+        position: 'relative',
+        overflow: 'hidden',
+        '&::before': {
+          content: '""',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'radial-gradient(circle at 30% 20%, rgba(52, 73, 94, 0.08) 0%, transparent 60%), radial-gradient(circle at 70% 80%, rgba(52, 152, 219, 0.08) 0%, transparent 60%)',
+          pointerEvents: 'none'
+        }
     }}>
       {/* Header */}
-      <Container component="header" sx={{ py: 3 }}>
-        <Box display="flex" alignItems="center">
-          <MedicalInformationIcon color="primary" sx={{ fontSize: 40, mr: 1.5 }} />
-          <Typography variant="h4" component="h1" fontWeight="bold">
-            Derma<span style={{ color: '#00bcd4' }}>Scan</span>
+      <Container component="header" sx={{ py: 4, position: 'relative', zIndex: 1 }}>
+        <Box display="flex" alignItems="center" justifyContent="center">
+          <MedicalInformationIcon color="primary" sx={{ fontSize: 48, mr: 2 }} />
+          <Typography variant="h3" component="h1" fontWeight="bold" sx={{ textAlign: 'center' }}>
+            Derma<span style={{ color: '#34495e' }}>Scan</span>
           </Typography>
         </Box>
       </Container>
       
-      <Container>
+      <Container sx={{ position: 'relative', zIndex: 1 }}>
         {/* Hero Section */}
         <Box textAlign="center" py={{ xs: 6, md: 10 }}>
-          <Chip label="Powered by Deep Learning" color="primary" variant="outlined" sx={{ mb: 3 }} />
-          <Typography variant="h2" fontWeight="bold" gutterBottom>
+          <Chip 
+            label="Powered by Deep Learning" 
+            color="primary" 
+            variant="outlined" 
+            sx={{ 
+              mb: 3, 
+              fontWeight: 600,
+              px: 2,
+              py: 1,
+              fontSize: '0.875rem'
+            }} 
+          />
+          <Typography variant="h2" fontWeight="bold" gutterBottom sx={{ color: 'text.primary' }}>
             Instant AI Skin Analysis
           </Typography>
-          <Typography variant="h6" color="text.secondary" maxWidth="lg" mx="auto">
+          <Typography variant="h6" color="text.secondary" maxWidth="lg" mx="auto" sx={{ lineHeight: 1.6 }}>
             Upload a photo of a skin lesion and our AI will provide an instant, preliminary analysis to help you better understand your skin health.
           </Typography>
         </Box>
@@ -159,7 +181,14 @@ const DermaScanHome = () => {
         </Box>
         
         {/* Main Analysis Area */}
-        <Paper elevation={12} sx={{ p: { xs: 2, md: 4 }, borderRadius: 4, background: 'rgba(30, 30, 30, 0.7)', backdropFilter: 'blur(10px)' }}>
+        <Paper elevation={12} sx={{ 
+          p: { xs: 3, md: 5 }, 
+          borderRadius: 2, 
+          background: 'rgba(39, 41, 61, 0.95)', 
+          backdropFilter: 'blur(20px)',
+          border: '1px solid rgba(52, 73, 94, 0.2)',
+          boxShadow: '0 7px 14px rgba(50, 50, 93, 0.1), 0 3px 6px rgba(0, 0, 0, 0.08)'
+        }}>
           <Grid container spacing={4} alignItems="center">
             <Grid item xs={12} md={6}>
               <UploadBox>
@@ -211,13 +240,26 @@ const DermaScanHome = () => {
         </Paper>
 
         {/* Disclaimer */}
-        <Alert severity="warning" sx={{ mt: 6, bgcolor: 'rgba(255, 152, 0, 0.1)', border: '1px solid rgba(255, 152, 0, 0.5)' }}>
-          <strong>Disclaimer:</strong> DermaScan is an informational AI tool, not a substitute for professional medical advice. Please consult a qualified dermatologist for any health concerns.
+        <Alert 
+          severity="warning" 
+          sx={{ 
+            mt: 8, 
+            bgcolor: 'rgba(255, 152, 0, 0.08)', 
+            border: '1px solid rgba(255, 152, 0, 0.3)',
+            borderRadius: 3,
+            '& .MuiAlert-icon': {
+              color: 'warning.main'
+            }
+          }}
+        >
+          <Typography variant="body1" sx={{ fontWeight: 600 }}>
+            <strong>Disclaimer:</strong> DermaScan is an informational AI tool, not a substitute for professional medical advice. Please consult a qualified dermatologist for any health concerns.
+          </Typography>
         </Alert>
 
         {/* Footer */}
-        <Box component="footer" sx={{ py: 6, mt: 6, textAlign: 'center' }}>
-          <Typography variant="body2" color="text.secondary">
+        <Box component="footer" sx={{ py: 8, mt: 8, textAlign: 'center', position: 'relative', zIndex: 1 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
             &copy; {new Date().getFullYear()} DermaScan. AI for skin health awareness.
           </Typography>
         </Box>
