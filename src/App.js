@@ -13,6 +13,7 @@ import ScanHistoryPage from './pages/ScanHistoryPage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import Navbar from './components/Navbar';
+import DoctorDashboard from './pages/DoctorDashboard'; // Import the new dashboard
 import { Box, CircularProgress } from '@mui/material';
 
 // --- Black Dashboard Theme ---
@@ -20,15 +21,15 @@ let lightTheme = createTheme({
   palette: {
     mode: 'dark',
     primary: { 
-      main: '#34495e',
-      light: '#5d6d7e',
-      dark: '#2c3e50',
+      main: '#3498db', // A brighter blue
+      light: '#5dade2',
+      dark: '#2980b9',
       contrastText: '#ffffff'
     },
     secondary: { 
-      main: '#3498db',
-      light: '#5dade2',
-      dark: '#2980b9'
+      main: '#e74c3c', // A stronger red for warnings/malignant
+      light: '#ec7063',
+      dark: '#c0392b'
     },
     background: { 
       default: '#1e1e2f', 
@@ -40,23 +41,15 @@ let lightTheme = createTheme({
     },
     error: {
       main: '#e74c3c',
-      light: '#ec7063',
-      dark: '#c0392b'
     },
     warning: {
       main: '#ffa726',
-      light: '#ffb74d',
-      dark: '#f57c00'
     },
     success: {
       main: '#00d4aa',
-      light: '#33dbb8',
-      dark: '#009473'
     },
     info: {
       main: '#17a2b8',
-      light: '#48c6d4',
-      dark: '#138496'
     }
   },
   typography: {
@@ -73,14 +66,13 @@ let lightTheme = createTheme({
   shape: {
     borderRadius: 12
   },
-  shadows: Array(25).fill('none'),
   components: {
     MuiButton: {
       styleOverrides: {
         root: {
           textTransform: 'none',
           fontWeight: 600,
-          borderRadius: 4,
+          borderRadius: 8,
           padding: '10px 20px',
           boxShadow: '0 4px 6px rgba(50, 50, 93, 0.11), 0 1px 3px rgba(0, 0, 0, 0.08)'
         }
@@ -89,7 +81,7 @@ let lightTheme = createTheme({
     MuiCard: {
       styleOverrides: {
         root: {
-          borderRadius: 6,
+          borderRadius: 8,
           boxShadow: '0 7px 14px rgba(50, 50, 93, 0.1), 0 3px 6px rgba(0, 0, 0, 0.08)',
           border: '1px solid rgba(255, 255, 255, 0.1)'
         }
@@ -98,7 +90,7 @@ let lightTheme = createTheme({
     MuiPaper: {
       styleOverrides: {
         root: {
-          borderRadius: 6,
+          borderRadius: 8,
           border: '1px solid rgba(255, 255, 255, 0.1)'
         }
       }
@@ -121,17 +113,14 @@ function App() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        // User is signed in, now fetch their profile from Firestore
         const userDocRef = doc(db, 'users', user.uid);
         const userDoc = await getDoc(userDocRef);
         if (userDoc.exists()) {
           setUserProfile({ uid: user.uid, ...userDoc.data() });
         } else {
-          // Handle case where user exists in Auth but not Firestore
-          setUserProfile(user); // Fallback to auth user object
+          setUserProfile(user);
         }
       } else {
-        // User is signed out
         setUserProfile(null);
       }
       setLoading(false);
@@ -148,8 +137,14 @@ function App() {
   };
 
   if (loading) {
-    return <Box display="flex" justifyContent="center" alignItems="center" height="100vh"><CircularProgress /></Box>;
+    return <Box display="flex" justifyContent="center" alignItems="center" height="100vh" bgcolor="background.default"><CircularProgress /></Box>;
   }
+  
+  const getRedirectPath = () => {
+    if (!userProfile) return "/login";
+    return userProfile.role === 'doctor' ? "/dashboard" : "/";
+  };
+
 
   return (
     <ThemeProvider theme={lightTheme}>
@@ -158,28 +153,21 @@ function App() {
         <Box sx={{ 
           backgroundColor: 'background.default', 
           minHeight: '100vh',
-          backgroundImage: 'linear-gradient(135deg, #1e1e2f 0%, #2b2b3d 50%, #1e1e2f 100%)'
         }}>
           <Navbar user={userProfile} onLogout={handleLogout} />
-          <Box sx={{ 
-            position: 'relative',
-            '&::before': {
-              content: '""',
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: 'radial-gradient(circle at 20% 50%, rgba(52, 73, 94, 0.05) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(52, 152, 219, 0.05) 0%, transparent 50%)',
-              pointerEvents: 'none'
-            }
-          }}>
+          <Box>
             <Routes>
               <Route path="/" element={<DermaScanHome userProfile={userProfile} />} />
               <Route path="/profile" element={userProfile ? <ProfilePage /> : <Navigate to="/login" />} />
+              
+              {/* Scan History can be viewed by patients for themselves, or doctors for a specific patient */}
               <Route path="/history" element={userProfile ? <ScanHistoryPage userProfile={userProfile} /> : <Navigate to="/login" />} />
-              <Route path="/login" element={userProfile ? <Navigate to="/history" /> : <LoginPage />} />
-              <Route path="/signup" element={userProfile ? <Navigate to="/history" /> : <SignupPage />} />
+
+              {/* Doctor Dashboard */}
+              <Route path="/dashboard" element={userProfile && userProfile.role === 'doctor' ? <DoctorDashboard /> : <Navigate to="/" />} />
+
+              <Route path="/login" element={userProfile ? <Navigate to={getRedirectPath()} /> : <LoginPage />} />
+              <Route path="/signup" element={userProfile ? <Navigate to={getRedirectPath()} /> : <SignupPage />} />
             </Routes>
           </Box>
         </Box>

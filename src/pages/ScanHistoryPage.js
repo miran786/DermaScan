@@ -2,12 +2,28 @@ import React, { useState, useEffect } from 'react';
 import {
   Container, Box, Typography, Grid, Paper, CircularProgress, Alert, Card, CardContent,
   CardMedia, Chip, Button, Dialog, DialogTitle, DialogContent, IconButton, List, ListItem,
-  ListItemAvatar, Avatar, ListItemText, TextField, DialogActions, Divider
+  ListItemAvatar, Avatar, ListItemText, TextField, DialogActions, Divider, FormControl, InputLabel, Select, MenuItem
 } from '@mui/material';
 import { Close as CloseIcon, ImageSearch as ImageSearchIcon, Person as PersonIcon, ArrowBack as ArrowBackIcon, Edit as EditIcon } from '@mui/icons-material';
-import { collection, query, orderBy, onSnapshot, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, getDocs, doc, updateDoc, where, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase/firebase';
 import { format } from 'date-fns';
+import { useLocation, useNavigate } from 'react-router-dom';
+
+const getStatusChipColor = (status) => {
+    switch (status) {
+        case 'Pending Review':
+            return 'default';
+        case 'Reviewed - Benign':
+            return 'success';
+        case 'Reviewed - Follow-up Required':
+            return 'warning';
+        case 'Urgent':
+            return 'error';
+        default:
+            return 'default';
+    }
+};
 
 const ScanHistoryPage = ({ userProfile }) => {
   const [scans, setScans] = useState([]);
@@ -18,42 +34,62 @@ const ScanHistoryPage = ({ userProfile }) => {
   const [isNotesOpen, setIsNotesOpen] = useState(false);
   const [currentNotes, setCurrentNotes] = useState('');
   const [currentMedication, setCurrentMedication] = useState('');
+  const [currentStatus, setCurrentStatus] = useState('Pending Review');
   
   // For doctors
   const [patients, setPatients] = useState([]);
   const [selectedPatient, setSelectedPatient] = useState(null);
   
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Effect to handle doctor navigation from dashboard
+  useEffect(() => {
+    if (userProfile?.role === 'doctor' && location.state?.patientId) {
+        const findPatient = patients.find(p => p.id === location.state.patientId);
+        if (findPatient) {
+            setSelectedPatient(findPatient);
+        }
+    }
+  }, [location.state, patients, userProfile]);
+
   useEffect(() => {
     if (!userProfile) return;
 
+    setLoading(true);
+
     if (userProfile.role === 'doctor') {
       const fetchPatients = async () => {
-        setLoading(true);
         try {
           const usersCollectionRef = collection(db, 'users');
-          const q = query(usersCollectionRef, orderBy('displayName'));
-          const querySnapshot = await getDocs(q);
-          const patientsList = querySnapshot.docs
-            .map(doc => ({ id: doc.id, ...doc.data() }))
-            .filter(user => user.id !== userProfile.uid); // Exclude the doctor themselves
-          setPatients(patientsList);
+          const q = query(usersCollectionRef, where('role', '==', 'user'), orderBy('displayName'));
+          
+          const unsubscribe = onSnapshot(q, (querySnapshot) => {
+            const patientsList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setPatients(patientsList);
+            if (!location.state?.patientId) setLoading(false);
+          }, (err) => {
+            setError('Failed to fetch patient list.');
+            console.error(err);
+            setLoading(false);
+          });
+          return unsubscribe;
         } catch (err) {
           setError('Failed to fetch patient list.');
           console.error(err);
+          setLoading(false);
         }
-        setLoading(false);
       };
-      fetchPatients();
+      const unsub = fetchPatients();
+      return () => unsub && unsub();
+
     } else {
       // For regular users
       const scansCollectionRef = collection(db, 'users', userProfile.uid, 'scans');
       const q = query(scansCollectionRef, orderBy('createdAt', 'desc'));
 
       const unsubscribe = onSnapshot(q, (querySnapshot) => {
-        const userScans = [];
-        querySnapshot.forEach((doc) => {
-          userScans.push({ id: doc.id, ...doc.data() });
-        });
+        const userScans = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setScans(userScans);
         setLoading(false);
       }, (err) => {
@@ -64,7 +100,7 @@ const ScanHistoryPage = ({ userProfile }) => {
 
       return () => unsubscribe();
     }
-  }, [userProfile]);
+  }, [userProfile, location.state]);
   
   useEffect(() => {
     if (selectedPatient) {
@@ -73,10 +109,7 @@ const ScanHistoryPage = ({ userProfile }) => {
         const q = query(scansCollectionRef, orderBy('createdAt', 'desc'));
         
         const unsubscribe = onSnapshot(q, (querySnapshot) => {
-            const userScans = [];
-            querySnapshot.forEach((doc) => {
-                userScans.push({ id: doc.id, ...doc.data() });
-            });
+            const userScans = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setScans(userScans);
             setLoading(false);
         }, (err) => {
@@ -98,6 +131,7 @@ const ScanHistoryPage = ({ userProfile }) => {
     setSelectedScan(scan);
     setCurrentNotes(scan.doctorNotes || '');
     setCurrentMedication(scan.medication || '');
+    setCurrentStatus(scan.status || 'Pending Review');
     setIsNotesOpen(true);
   };
 
@@ -108,19 +142,27 @@ const ScanHistoryPage = ({ userProfile }) => {
         await updateDoc(scanDocRef, {
             doctorNotes: currentNotes,
             medication: currentMedication,
-            doctorId: userProfile.uid,
-            doctorName: userProfile.displayName
+            status: currentStatus,
+            reviewedBy: {
+              uid: userProfile.uid,
+              name: userProfile.displayName
+            },
+            reviewedAt: serverTimestamp(),
         });
         setIsNotesOpen(false);
-        // Refresh data locally
-        const updatedScans = scans.map(s => s.id === selectedScan.id ? {...s, doctorNotes: currentNotes, medication: currentMedication } : s);
-        setScans(updatedScans);
-        setSelectedScan({...selectedScan, doctorNotes: currentNotes, medication: currentMedication});
+        const updatedScanData = { ...selectedScan, doctorNotes: currentNotes, medication: currentMedication, status: currentStatus };
+        setSelectedScan(updatedScanData);
     } catch (error) {
         console.error("Error updating notes:", error);
         setError("Failed to save notes.");
     }
   };
+
+  const handleBackToPatientList = () => {
+    setSelectedPatient(null); 
+    setScans([]); 
+    navigate('/history', { replace: true });
+  }
   
   if (loading) {
     return <Box display="flex" justifyContent="center" sx={{ mt: 10 }}><CircularProgress /></Box>;
@@ -154,13 +196,13 @@ const ScanHistoryPage = ({ userProfile }) => {
   // User or Doctor's Patient History View
   return (
     <Container sx={{ py: 8 }}>
-      <Box textAlign="center" mb={6}>
+      <Box mb={6}>
         {userProfile.role === 'doctor' && selectedPatient && (
-            <Button startIcon={<ArrowBackIcon />} onClick={() => {setSelectedPatient(null); setScans([])}} sx={{ mb: 2 }}>
+            <Button startIcon={<ArrowBackIcon />} onClick={handleBackToPatientList} sx={{ mb: 2 }}>
                 Back to Patient List
             </Button>
         )}
-        <Typography variant="h3" fontWeight="bold" gutterBottom>
+        <Typography variant="h3" fontWeight="bold" textAlign="center">
           {selectedPatient ? `${selectedPatient.displayName}'s Scan History` : 'Your Scan History'}
         </Typography>
       </Box>
@@ -182,9 +224,16 @@ const ScanHistoryPage = ({ userProfile }) => {
                   alt="Scan image"
                 />
                 <CardContent sx={{ flexGrow: 1 }}>
-                  <Typography variant="h6" fontWeight="bold">{scan.result.disease}</Typography>
+                   <Box display="flex" justifyContent="space-between" alignItems="center">
+                        <Typography variant="h6" fontWeight="bold">{scan.result.disease}</Typography>
+                        <Chip 
+                            label={scan.status || 'Pending Review'}
+                            size="small"
+                            color={getStatusChipColor(scan.status)}
+                        />
+                   </Box>
                   <Chip
-                    label={scan.result.is_malignant ? "Potential Concern" : "Likely Benign"}
+                    label={scan.result.is_malignant ? "AI: Potential Concern" : "AI: Likely Benign"}
                     color={scan.result.is_malignant ? "error" : "success"}
                     size="small" sx={{ my: 1 }}/>
                   <Typography variant="body2" color="text.secondary">
@@ -197,7 +246,7 @@ const ScanHistoryPage = ({ userProfile }) => {
                   </Button>
                   {userProfile.role === 'doctor' && (
                     <Button fullWidth variant="contained" startIcon={<EditIcon />} onClick={() => handleOpenNotes(scan)} sx={{ mt: 1 }}>
-                        Doctor Notes
+                        Doctor's Assessment
                     </Button>
                   )}
                 </Box>
@@ -220,17 +269,21 @@ const ScanHistoryPage = ({ userProfile }) => {
               </Grid>
               <Grid item xs={12} md={6}>
                 <Typography variant="h5" fontWeight="bold">{selectedScan.result.disease}</Typography>
-                <Chip label={selectedScan.result.is_malignant ? "Potential Concern" : "Likely Benign"} color={selectedScan.result.is_malignant ? "error" : "success"} sx={{ my: 2 }}/>
-                <Typography variant="body1"><strong>Confidence:</strong> {Math.round(selectedScan.result.confidence * 100)}%</Typography>
+                 <Box display="flex" alignItems="center" my={2} gap={2}>
+                    <Chip label={`AI: ${selectedScan.result.is_malignant ? "Potential Concern" : "Likely Benign"}`} color={selectedScan.result.is_malignant ? "error" : "success"} />
+                    <Chip label={`Status: ${selectedScan.status || 'Pending Review'}`} color={getStatusChipColor(selectedScan.status)} variant="outlined" />
+                 </Box>
+                <Typography variant="body1"><strong>AI Confidence:</strong> {Math.round(selectedScan.result.confidence * 100)}%</Typography>
                 <Typography variant="body1"><strong>Scan Date:</strong> {selectedScan.createdAt ? format(selectedScan.createdAt.toDate(), 'MMMM d, yyyy, p') : 'N/A'}</Typography>
                 <Divider sx={{ my: 2 }} />
                 <Typography variant="body2" color="text.secondary">{selectedScan.result.description}</Typography>
                 
                 {(selectedScan.doctorNotes || selectedScan.medication) && (
-                    <Box mt={3}>
+                    <Box mt={3} p={2} borderRadius={2} bgcolor="background.default">
                         <Typography variant="h6" fontWeight="bold">Doctor's Assessment</Typography>
                         <Typography variant="body1" sx={{ mt: 1 }}><strong>Notes:</strong> {selectedScan.doctorNotes || 'N/A'}</Typography>
                         <Typography variant="body1"><strong>Medication:</strong> {selectedScan.medication || 'N/A'}</Typography>
+                        {selectedScan.reviewedBy && <Typography variant="caption" color="text.secondary">Reviewed by Dr. {selectedScan.reviewedBy.name}</Typography>}
                     </Box>
                 )}
               </Grid>
@@ -240,8 +293,21 @@ const ScanHistoryPage = ({ userProfile }) => {
       )}
 
       <Dialog open={isNotesOpen} onClose={() => setIsNotesOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Add/Edit Doctor's Notes</DialogTitle>
+        <DialogTitle>Add/Edit Doctor's Assessment</DialogTitle>
         <DialogContent>
+            <FormControl fullWidth margin="dense" sx={{ mt: 2 }}>
+                <InputLabel>Status</InputLabel>
+                <Select
+                    value={currentStatus}
+                    label="Status"
+                    onChange={(e) => setCurrentStatus(e.target.value)}
+                >
+                    <MenuItem value="Pending Review">Pending Review</MenuItem>
+                    <MenuItem value="Reviewed - Benign">Reviewed - Benign</MenuItem>
+                    <MenuItem value="Reviewed - Follow-up Required">Reviewed - Follow-up Required</MenuItem>
+                    <MenuItem value="Urgent">Urgent</MenuItem>
+                </Select>
+            </FormControl>
             <TextField
                 autoFocus
                 margin="dense"
@@ -252,7 +318,6 @@ const ScanHistoryPage = ({ userProfile }) => {
                 variant="outlined"
                 value={currentNotes}
                 onChange={(e) => setCurrentNotes(e.target.value)}
-                sx={{ mt: 2 }}
             />
             <TextField
                 margin="dense"

@@ -3,9 +3,9 @@ import { AppBar, Toolbar, Typography, Button, Container, Box, Avatar } from '@mu
 import { NavLink } from 'react-router-dom';
 import MedicalInformationIcon from '@mui/icons-material/MedicalInformation';
 
-// Accept 'user' and 'onLogout' as props
 const Navbar = ({ user, onLogout }) => {
-  const isAuthenticated = !!user; 
+  const isAuthenticated = !!user;
+  const isDoctor = user?.role === 'doctor';
 
   return (
     <AppBar 
@@ -35,35 +35,32 @@ const Navbar = ({ user, onLogout }) => {
               }
             }}
           >
-            Derma<span style={{ color: '#34495e' }}>Scan</span>
+            Derma<span style={{ color: '#3498db' }}>Scan</span>
           </Typography>
 
           {isAuthenticated ? (
             <Box display="flex" alignItems="center" gap={1}>
-              <Button 
-                component={NavLink} 
-                to="/history" 
-                sx={{ 
-                  color: 'text.primary',
-                  fontWeight: 500,
-                  '&:hover': {
-                    backgroundColor: 'rgba(225, 78, 202, 0.1)'
-                  }
-                }}
-              >
-                Scan History
-              </Button>
+              {isDoctor ? (
+                <Button 
+                  component={NavLink} 
+                  to="/dashboard" 
+                  sx={{ color: 'text.primary', fontWeight: 500 }}
+                >
+                  Dashboard
+                </Button>
+              ) : (
+                <Button 
+                  component={NavLink} 
+                  to="/history" 
+                  sx={{ color: 'text.primary', fontWeight: 500 }}
+                >
+                  Scan History
+                </Button>
+              )}
               <Button 
                 component={NavLink} 
                 to="/profile" 
-                sx={{ 
-                  color: 'text.primary',
-                  fontWeight: 500,
-                  mr: 2,
-                  '&:hover': {
-                    backgroundColor: 'rgba(225, 78, 202, 0.1)'
-                  }
-                }}
+                sx={{ color: 'text.primary', fontWeight: 500, mr: 2 }}
               >
                 Profile
               </Button>
@@ -87,7 +84,7 @@ const Navbar = ({ user, onLogout }) => {
                   borderColor: 'primary.main',
                   '&:hover': {
                     borderColor: 'primary.dark',
-                    backgroundColor: 'primary.main',
+                    backgroundColor: 'primary.dark',
                     color: 'white'
                   }
                 }}
@@ -100,13 +97,7 @@ const Navbar = ({ user, onLogout }) => {
               <Button 
                 component={NavLink} 
                 to="/login" 
-                color="primary"
-                sx={{ 
-                  fontWeight: 500,
-                  '&:hover': {
-                    backgroundColor: 'rgba(225, 78, 202, 0.1)'
-                  }
-                }}
+                sx={{ color: 'text.primary', fontWeight: 500 }}
               >
                 Login
               </Button>

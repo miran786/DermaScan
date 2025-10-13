@@ -1,4 +1,3 @@
-// src/pages/DermaScanHome.js
 import React, { useState, useRef } from 'react';
 import {
   Container,
@@ -15,18 +14,17 @@ import {
   Stepper,
   Step,
   StepLabel,
-  StepConnector,
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import {
-  UploadFile as UploadFileIcon,
   CloudUpload as CloudUploadIcon,
   MedicalInformation as MedicalInformationIcon,
   ArrowForward as ArrowForwardIcon,
 } from '@mui/icons-material';
-import { auth, db, storage } from '../firebase/firebase';
+import { auth, db, storage, functions } from '../firebase/firebase'; // Make sure to import 'functions'
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { httpsCallable } from "firebase/functions";
 import { useNavigate } from 'react-router-dom';
 
 const UploadBox = styled(Box)(({ theme }) => ({
@@ -45,20 +43,18 @@ const UploadBox = styled(Box)(({ theme }) => ({
   '&:hover': {
     borderColor: theme.palette.primary.main,
     backgroundColor: 'rgba(52, 73, 94, 0.08)',
-    transform: 'translateY(-2px)',
-    boxShadow: '0 7px 14px rgba(50, 50, 93, 0.1), 0 3px 6px rgba(0, 0, 0, 0.08)',
   },
 }));
 
 const ResultCard = styled(Card)(({ theme, isMalignant }) => ({
-  backgroundColor: isMalignant ? 'rgba(231, 76, 60, 0.1)' : 'rgba(52, 73, 94, 0.1)',
+  backgroundColor: isMalignant ? 'rgba(231, 76, 60, 0.1)' : 'rgba(52, 152, 219, 0.1)',
   borderLeft: `5px solid ${isMalignant ? theme.palette.secondary.main : theme.palette.primary.main}`,
   transition: 'opacity 0.5s ease-in-out, transform 0.5s ease-in-out',
   opacity: 0,
   transform: 'translateY(20px)',
 }));
 
-const DermaScanHome = () => {
+const DermaScanHome = ({ userProfile }) => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [previewUrl, setPreviewUrl] = useState('');
   const [result, setResult] = useState(null);
@@ -82,6 +78,11 @@ const DermaScanHome = () => {
   };
 
   const handleAnalyzeClick = async () => {
+    if (!auth.currentUser) {
+        setError('You must be logged in to perform a scan.');
+        navigate('/login');
+        return;
+    }
     if (!selectedImage) {
       setError('Please upload an image first.');
       return;
@@ -91,29 +92,31 @@ const DermaScanHome = () => {
     setResult(null);
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      const mockData = {
-        disease: 'Benign Keratosis-like Lesions (BKL)',
-        confidence: 0.89,
-        description: 'This is a common, non-cancerous skin growth. They often appear in middle-aged or older adults and are not a cause for concern.',
-        is_malignant: false,
-      };
-      setResult(mockData);
-
       const currentUser = auth.currentUser;
-      if (currentUser) {
-        const storageRef = ref(storage, `scans/${currentUser.uid}/${Date.now()}-${selectedImage.name}`);
-        const uploadTask = await uploadBytes(storageRef, selectedImage);
-        const downloadURL = await getDownloadURL(uploadTask.ref);
+      
+      // Step 1: Upload image to Firebase Storage to get a public URL
+      const storageRef = ref(storage, `scans/${currentUser.uid}/${Date.now()}-${selectedImage.name}`);
+      const uploadTask = await uploadBytes(storageRef, selectedImage);
+      const downloadURL = await getDownloadURL(uploadTask.ref);
 
-        const scansCollectionRef = collection(db, 'users', currentUser.uid, 'scans');
-        await addDoc(scansCollectionRef, {
-          createdAt: serverTimestamp(),
-          imageUrl: downloadURL,
-          result: mockData,
-        });
-      }
+      // Step 2: Call the Firebase Cloud Function with the image URL
+      const analyzeImageFunction = httpsCallable(functions, 'analyzeImageWithGoogle');
+      const analysisResponse = await analyzeImageFunction({ imageUrl: downloadURL });
+      const analysisResult = analysisResponse.data;
+      
+      setResult(analysisResult);
 
+      // Step 3: Save the result to Firestore
+      const scansCollectionRef = collection(db, 'users', currentUser.uid, 'scans');
+      await addDoc(scansCollectionRef, {
+        createdAt: serverTimestamp(),
+        imageUrl: downloadURL,
+        result: analysisResult,
+        status: 'Pending Review',
+        patientName: currentUser.displayName,
+      });
+
+      // Animate result card
       setTimeout(() => {
         const resultCard = document.getElementById('result-card');
         if (resultCard) {
@@ -123,7 +126,7 @@ const DermaScanHome = () => {
       }, 100);
 
     } catch (err) {
-      setError('An unexpected error occurred during analysis.');
+      setError(err.message || 'An unexpected error occurred during analysis.');
       console.error(err);
     } finally {
       setLoading(false);
@@ -135,91 +138,49 @@ const DermaScanHome = () => {
   const steps = ['Upload a clear image', 'AI analyzes the lesion', 'Receive your preliminary result'];
 
   return (
-    <Box sx={{
-        background: `linear-gradient(135deg, #1e1e2f 0%, #2b2b3d 50%, #1e1e2f 100%)`,
-        position: 'relative',
-        overflow: 'hidden',
-        '&::before': {
-          content: '""',
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'radial-gradient(circle at 30% 20%, rgba(52, 73, 94, 0.08) 0%, transparent 60%), radial-gradient(circle at 70% 80%, rgba(52, 152, 219, 0.08) 0%, transparent 60%)',
-          pointerEvents: 'none'
-        }
-    }}>
-      <Container component="header" sx={{ py: 4, position: 'relative', zIndex: 1 }}>
+    <Box>
+       <Container component="header" sx={{ py: 4 }}>
         <Box display="flex" alignItems="center" justifyContent="center">
           <MedicalInformationIcon color="primary" sx={{ fontSize: 48, mr: 2 }} />
           <Typography variant="h3" component="h1" fontWeight="bold" sx={{ textAlign: 'center' }}>
-            Derma<span style={{ color: '#34495e' }}>Scan</span>
+            Derma<span style={{ color: '#3498db' }}>Scan</span>
           </Typography>
         </Box>
       </Container>
       
-      <Container sx={{ position: 'relative', zIndex: 1 }}>
-        <Box textAlign="center" py={{ xs: 6, md: 10 }}>
-          <Chip 
-            label="Powered by Deep Learning" 
-            color="primary" 
-            variant="outlined" 
-            sx={{ 
-              mb: 3, 
-              fontWeight: 600,
-              px: 2,
-              py: 1,
-              fontSize: '0.875rem'
-            }} 
-          />
-          <Typography variant="h2" fontWeight="bold" gutterBottom sx={{ color: 'text.primary' }}>
-            Instant AI Skin Analysis
-          </Typography>
-          <Typography variant="h6" color="text.secondary" maxWidth="lg" mx="auto" sx={{ lineHeight: 1.6 }}>
+      <Container>
+        <Box textAlign="center" py={{ xs: 6, md: 8 }}>
+          <Chip label="Powered by Google Cloud Vision AI" color="primary" variant="outlined" sx={{ mb: 3 }} />
+          <Typography variant="h2" fontWeight="bold" gutterBottom>Instant AI Skin Analysis</Typography>
+          <Typography variant="h6" color="text.secondary" maxWidth="md" mx="auto">
             Upload a photo of a skin lesion and our AI will provide an instant, preliminary analysis to help you better understand your skin health.
           </Typography>
         </Box>
 
-        <Box my={{ xs: 6, md: 10 }}>
-            <Typography variant="h4" textAlign="center" fontWeight="bold" gutterBottom sx={{ mb: 5 }}>
-                Simple, Fast, and Insightful
-            </Typography>
-             <Stepper alternativeLabel activeStep={3} connector={<StepConnector sx={{ top: 22 }} />}>
+        <Box my={{ xs: 6, md: 8 }}>
+            <Stepper alternativeLabel activeStep={3}>
                 {steps.map((label) => (
                     <Step key={label}>
-                        <StepLabel StepIconProps={{ sx: { fontSize: '2.5rem', color: '#00bcd4 !important' } }}>{label}</StepLabel>
+                        <StepLabel>{label}</StepLabel>
                     </Step>
                 ))}
             </Stepper>
         </Box>
         
-        <Paper elevation={12} sx={{ 
-          p: { xs: 3, md: 5 }, 
-          borderRadius: 2, 
-          background: 'rgba(39, 41, 61, 0.95)', 
-          backdropFilter: 'blur(20px)',
-          border: '1px solid rgba(52, 73, 94, 0.2)',
-          boxShadow: '0 7px 14px rgba(50, 50, 93, 0.1), 0 3px 6px rgba(0, 0, 0, 0.08)'
-        }}>
+        <Paper elevation={12} sx={{ p: { xs: 3, md: 5 }, borderRadius: 3 }}>
           <Grid container spacing={4} alignItems="center">
             <Grid item xs={12} md={6}>
-              <UploadBox>
+              <UploadBox onClick={handleUploadClick}>
                 {previewUrl ? (
                   <img src={previewUrl} alt="Skin lesion preview" style={{ maxWidth: '100%', maxHeight: '350px', borderRadius: '12px' }} />
                 ) : (
                   <>
                     <CloudUploadIcon sx={{ fontSize: 80, color: 'grey.600', mb: 2 }} />
-                    <Typography color="text.secondary">
-                      Drag & drop an image or click below
-                    </Typography>
+                    <Typography color="text.secondary">Drag & drop an image or click to select</Typography>
                   </>
                 )}
               </UploadBox>
               <input type="file" ref={fileInputRef} onChange={handleImageChange} accept="image/*" style={{ display: 'none' }} />
-              <Button variant="outlined" startIcon={<UploadFileIcon />} onClick={handleUploadClick} fullWidth sx={{ mt: 2, py: 1.5 }}>
-                {previewUrl ? 'Choose Different Image' : 'Upload Image'}
-              </Button>
             </Grid>
             <Grid item xs={12} md={6}>
               <Typography variant="h5" fontWeight="bold" gutterBottom>Analysis Report</Typography>
@@ -229,7 +190,7 @@ const DermaScanHome = () => {
                 {loading ? (
                   <Box textAlign="center">
                     <CircularProgress />
-                    <Typography sx={{ mt: 2 }}>Our AI is analyzing your image...</Typography>
+                    <Typography sx={{ mt: 2 }}>Google's AI is analyzing your image...</Typography>
                   </Box>
                 ) : result ? (
                   <ResultCard id="result-card" isMalignant={result.is_malignant}>
@@ -245,32 +206,19 @@ const DermaScanHome = () => {
                 )}
               </Box>
               
-              <Button variant="contained" color="primary" onClick={handleAnalyzeClick} disabled={loading || !selectedImage} fullWidth size="large" endIcon={<ArrowForwardIcon />} sx={{ mt: 3, py: 1.5, fontSize: '1.1rem', fontWeight: 'bold' }}>
+              <Button variant="contained" color="primary" onClick={handleAnalyzeClick} disabled={loading || !selectedImage} fullWidth size="large" endIcon={<ArrowForwardIcon />} sx={{ mt: 3, py: 1.5 }}>
                 {loading ? 'Analyzing...' : 'Run AI Analysis'}
               </Button>
             </Grid>
           </Grid>
         </Paper>
 
-        <Alert 
-          severity="warning" 
-          sx={{ 
-            mt: 8, 
-            bgcolor: 'rgba(255, 152, 0, 0.08)', 
-            border: '1px solid rgba(255, 152, 0, 0.3)',
-            borderRadius: 3,
-            '& .MuiAlert-icon': {
-              color: 'warning.main'
-            }
-          }}
-        >
-          <Typography variant="body1" sx={{ fontWeight: 600 }}>
-            <strong>Disclaimer:</strong> DermaScan is an informational AI tool, not a substitute for professional medical advice. Please consult a qualified dermatologist for any health concerns.
-          </Typography>
+        <Alert severity="warning" sx={{ mt: 6 }}>
+          <strong>Disclaimer:</strong> DermaScan is an informational AI tool, not a substitute for professional medical advice. Please consult a qualified dermatologist for any health concerns.
         </Alert>
 
-        <Box component="footer" sx={{ py: 8, mt: 8, textAlign: 'center', position: 'relative', zIndex: 1 }}>
-          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
+        <Box component="footer" sx={{ py: 6, textAlign: 'center' }}>
+          <Typography variant="body2" color="text.secondary">
             &copy; {new Date().getFullYear()} DermaScan. AI for skin health awareness.
           </Typography>
         </Box>
