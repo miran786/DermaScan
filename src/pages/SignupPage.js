@@ -1,75 +1,52 @@
 import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore'; // Import serverTimestamp
+import { auth, db } from '../firebase/firebase';
 import {
   Container,
-  Paper,
+  Box,
+  Typography,
   TextField,
   Button,
-  Typography,
-  Box,
+  Grid,
   Alert,
-  InputAdornment,
-  IconButton,
-  CircularProgress,
-  Link as MuiLink
+  Paper
 } from '@mui/material';
-import {
-  Visibility as VisibilityIcon,
-  VisibilityOff as VisibilityOffIcon,
-  PersonAdd as PersonAddIcon,
-  MedicalInformation as MedicalInformationIcon,
-} from '@mui/icons-material';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db } from '../firebase/firebase';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
 
 const SignupPage = () => {
-  const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
   const handleSignup = async (e) => {
     e.preventDefault();
-    setError('');
     setLoading(true);
-
-    if (password.length < 6) {
-        setError("Password should be at least 6 characters long.");
-        setLoading(false);
-        return;
-    }
+    setError('');
 
     try {
-      // 1. Create user in Firebase Authentication
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // 2. Create user document in Firestore
-      const userDocRef = doc(db, 'users', user.uid);
-      await setDoc(userDocRef, {
-        displayName: displayName,
-        email: user.email,
-        createdAt: serverTimestamp(),
-        role: 'user', // Default role for new signups
-        status: 'active',
+      // Update Firebase Auth profile
+      await updateProfile(user, {
+        displayName: displayName
       });
 
-      navigate('/'); // Redirect to home page on successful signup
+      // Create a user document in Firestore with the 'doctor' role
+      await setDoc(doc(db, 'users', user.uid), {
+        displayName: displayName,
+        email: user.email,
+        role: 'doctor', // <-- CORRECT: This identifies them as a doctor
+        createdAt: serverTimestamp()
+      });
+
+      navigate('/dashboard'); // Redirect to dashboard after signup
     } catch (err) {
-      let errorMessage = 'An unknown error occurred. Please try again.';
-       if (err.code === 'auth/email-already-in-use') {
-        errorMessage = 'This email address is already registered. Please login instead.';
-      } else if (err.code === 'auth/invalid-email') {
-        errorMessage = 'Please enter a valid email address.';
-      } else if (err.code === 'auth/weak-password') {
-        errorMessage = 'The password is too weak. Please use a stronger password.';
-      }
-      setError(errorMessage);
-      console.error('Firebase Signup Error:', err.code, err.message);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -77,86 +54,68 @@ const SignupPage = () => {
 
   return (
     <Container component="main" maxWidth="xs">
-      <Paper
-        elevation={6}
-        sx={{
-          marginTop: 8,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          padding: 4,
-          borderRadius: 2
-        }}
-      >
-        <MedicalInformationIcon color="primary" sx={{ fontSize: 40, mb: 1 }} />
-        <Typography component="h1" variant="h5" fontWeight="bold">
-          Create Your Account
+      <Paper elevation={12} sx={{ mt: 8, p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <Typography component="h1" variant="h4" fontWeight="bold">
+          Doctor Sign Up
         </Typography>
-        <Box component="form" onSubmit={handleSignup} sx={{ mt: 1, width: '100%' }}>
-          {error && <Alert severity="error" sx={{ my: 2, width: '100%' }}>{error}</Alert>}
-          <TextField
-            margin="normal"
-            required
-            fullWidth
-            id="displayName"
-            label="Full Name"
-            name="displayName"
-            autoComplete="name"
-            autoFocus
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-          />
-          <TextField
-            margin="normal"
-            required
-            fullWidth
-            id="email"
-            label="Email Address"
-            name="email"
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-          <TextField
-            margin="normal"
-            required
-            fullWidth
-            name="password"
-            label="Password"
-            type={showPassword ? 'text' : 'password'}
-            id="password"
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            InputProps={{
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton
-                    aria-label="toggle password visibility"
-                    onClick={() => setShowPassword(!showPassword)}
-                    edge="end"
-                  >
-                    {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                  </IconButton>
-                </InputAdornment>
-              ),
-            }}
-          />
+        <Box component="form" onSubmit={handleSignup} sx={{ mt: 3 }}>
+          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <TextField
+                autoComplete="name"
+                name="displayName"
+                required
+                fullWidth
+                id="displayName"
+                label="Full Name"
+                autoFocus
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                required
+                fullWidth
+                id="email"
+                label="Email Address"
+                name="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                required
+                fullWidth
+                name="password"
+                label="Password"
+                type="password"
+                id="password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </Grid>
+          </Grid>
           <Button
             type="submit"
             fullWidth
             variant="contained"
             disabled={loading}
             sx={{ mt: 3, mb: 2, py: 1.5 }}
-            startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <PersonAddIcon />}
           >
-            {loading ? 'Creating Account...' : 'Sign Up'}
+            {loading ? 'Signing Up...' : 'Sign Up'}
           </Button>
-          <Box textAlign="center">
-            <MuiLink component={RouterLink} to="/login" variant="body2">
-              {"Already have an account? Sign In"}
-            </MuiLink>
-          </Box>
+          <Grid container justifyContent="flex-end">
+            <Grid item>
+              <Button component={Link} to="/login" variant="text">
+                Already have an account? Sign in
+              </Button>
+            </Grid>
+          </Grid>
         </Box>
       </Paper>
     </Container>

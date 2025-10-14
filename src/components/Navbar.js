@@ -1,126 +1,41 @@
 import React from 'react';
-import { AppBar, Toolbar, Typography, Button, Container, Box, Avatar } from '@mui/material';
-import { NavLink } from 'react-router-dom';
+import { AppBar, Toolbar, Typography, Button, Box } from '@mui/material';
+import { Link, useNavigate } from 'react-router-dom';
 import MedicalInformationIcon from '@mui/icons-material/MedicalInformation';
 
 const Navbar = ({ user, onLogout }) => {
-  const isAuthenticated = !!user;
-  const isDoctor = user?.role === 'doctor';
+  const navigate = useNavigate();
+
+  const handleLogoutClick = () => {
+    onLogout();
+    navigate('/login');
+  };
 
   return (
-    <AppBar 
-      position="static" 
-      sx={{ 
-        backgroundColor: 'rgba(39, 41, 61, 0.95)',
-        backdropFilter: 'blur(10px)',
-        borderBottom: '1px solid rgba(52, 73, 94, 0.2)',
-        boxShadow: '0 1px 20px 0 rgba(0, 0, 0, 0.3)'
-      }}
-      elevation={0}
-    >
-      <Container maxWidth="xl">
-        <Toolbar disableGutters sx={{ py: 1 }}>
-          <MedicalInformationIcon color="primary" sx={{ fontSize: 36, mr: 2 }} />
-          <Typography
-            variant="h5"
-            component={NavLink}
-            to="/"
-            fontWeight="bold"
-            sx={{ 
-              flexGrow: 1, 
-              textDecoration: 'none', 
-              color: 'text.primary',
-              '&:hover': {
-                color: 'primary.main'
-              }
-            }}
-          >
+    <AppBar position="static" color="transparent" elevation={1} sx={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
+      <Toolbar>
+        <Box display="flex" alignItems="center" component={Link} to="/dashboard" sx={{ textDecoration: 'none', color: 'inherit' }}>
+            <MedicalInformationIcon color="primary" sx={{ mr: 1 }} />
+            <Typography variant="h6" component="div" sx={{ flexGrow: 1, fontWeight: 'bold' }}>
             Derma<span style={{ color: '#3498db' }}>Scan</span>
-          </Typography>
-
-          {isAuthenticated ? (
-            <Box display="flex" alignItems="center" gap={1}>
-              {isDoctor ? (
-                <Button 
-                  component={NavLink} 
-                  to="/dashboard" 
-                  sx={{ color: 'text.primary', fontWeight: 500 }}
-                >
-                  Dashboard
-                </Button>
-              ) : (
-                <Button 
-                  component={NavLink} 
-                  to="/history" 
-                  sx={{ color: 'text.primary', fontWeight: 500 }}
-                >
-                  Scan History
-                </Button>
-              )}
-              <Button 
-                component={NavLink} 
-                to="/profile" 
-                sx={{ color: 'text.primary', fontWeight: 500, mr: 2 }}
-              >
-                Profile
-              </Button>
-              <Avatar 
-                sx={{ 
-                  width: 32, 
-                  height: 32, 
-                  mr: 2, 
-                  bgcolor: 'primary.main',
-                  fontSize: '0.875rem'
-                }}
-              >
-                {user?.displayName?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || 'U'}
-              </Avatar>
-              <Button 
-                variant="outlined" 
-                color="primary" 
-                onClick={onLogout}
-                sx={{ 
-                  fontWeight: 600,
-                  borderColor: 'primary.main',
-                  '&:hover': {
-                    borderColor: 'primary.dark',
-                    backgroundColor: 'primary.dark',
-                    color: 'white'
-                  }
-                }}
-              >
-                Log Out
-              </Button>
-            </Box>
-          ) : (
-            <Box display="flex" alignItems="center" gap={1}>
-              <Button 
-                component={NavLink} 
-                to="/login" 
-                sx={{ color: 'text.primary', fontWeight: 500 }}
-              >
-                Login
-              </Button>
-              <Button 
-                component={NavLink} 
-                to="/signup" 
-                variant="contained" 
-                color="primary"
-                sx={{ 
-                  fontWeight: 600,
-                  ml: 1,
-                  px: 3,
-                  '&:hover': {
-                    backgroundColor: 'primary.dark'
-                  }
-                }}
-              >
-                Sign Up
-              </Button>
-            </Box>
-          )}
-        </Toolbar>
-      </Container>
+            </Typography>
+        </Box>
+        <Box sx={{ flexGrow: 1 }} />
+        {user ? (
+          <Box>
+            {/* The Dashboard button now shows for ANY logged-in user */}
+            <Button color="inherit" component={Link} to="/dashboard">Dashboard</Button>
+            <Button color="inherit" component={Link} to="/history">Scan History</Button>
+            <Button color="inherit" component={Link} to="/profile">Profile</Button>
+            <Button color="primary" variant="outlined" onClick={handleLogoutClick}>Logout</Button>
+          </Box>
+        ) : (
+          <Box>
+            <Button color="inherit" component={Link} to="/login">Login</Button>
+            <Button variant="contained" color="primary" component={Link} to="/signup">Sign Up</Button>
+          </Box>
+        )}
+      </Toolbar>
     </AppBar>
   );
 };

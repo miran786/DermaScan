@@ -1,32 +1,22 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
-const {onCall} = require("firebase-functions/v2/https");
-const {ImageAnnotatorClient} = require("@google-cloud/vision");
+const vision = require("@google-cloud/vision");
 
 admin.initializeApp();
 
-const visionClient = new ImageAnnotatorClient();
+// Initialize the Google Cloud Vision client
+const visionClient = new vision.ImageAnnotatorClient();
 
-// List of generic terms to ignore from the AI results
-const GENERIC_TERMS = new Set([
-  "skin", "dermatology", "close-up", "photography", "macro photography",
-  "medical", "diagnosis", "health", "human body", "flesh",
-]);
-
-// List of keywords that suggest a potential concern
-const MALIGNANT_KEYWORDS = [
-  "melanoma", "carcinoma", "malignant", "cancer",
-];
-
-exports.analyzeImageWithGoogle = onCall({cors: true}, async (request) => {
-  if (!request.auth) {
+exports.analyzeImageWithGoogle = functions.https.onCall(async (data, context) => {
+  // Ensure the user is authenticated.
+  if (!context.auth) {
     throw new functions.https.HttpsError(
         "unauthenticated",
-        "You must be logged in to perform an analysis.",
+        "The function must be called while authenticated.",
     );
   }
 
-  const {imageUrl} = request.data;
+  const imageUrl = data.imageUrl;
   if (!imageUrl) {
     throw new functions.https.HttpsError(
         "invalid-argument",
@@ -35,56 +25,46 @@ exports.analyzeImageWithGoogle = onCall({cors: true}, async (request) => {
   }
 
   try {
-    const [result] = await visionClient.webDetection(imageUrl);
+    // Use the Vision AI to detect labels in the image.
+    // In a real-world scenario, you'd use a more sophisticated model,
+    // but for this example, we'll simulate a result based on labels.
+    const [result] = await visionClient.labelDetection(imageUrl);
+    const labels = result.labelAnnotations.map((label) => label.description.toLowerCase());
 
-    if (!result.webDetection || !result.webDetection.webEntities) {
-      // If the API returns no web entities, return inconclusive
-      return {
-        disease: "Analysis Inconclusive",
-        confidence: 0.70,
-        description: "The AI could not identify any visually similar images online. A professional consultation is strongly recommended.",
-        is_malignant: false,
-      };
+    // --- MOCK ANALYSIS LOGIC ---
+    // This is a simplified example. A real application would use a custom
+    // AutoML model trained on skin lesion images.
+    let disease = "Benign Nevus (Mole)";
+    let description = "This appears to be a common mole. These are typically harmless but should be monitored for changes.";
+    let confidence = 0.85 + Math.random() * 0.1; // Simulate high confidence
+    let isMalignant = false;
+
+    if (labels.includes("melanoma") || labels.includes("lesion") && (labels.includes("asymmetry") || labels.includes("irregular"))) {
+      disease = "Suspicious Lesion (Possible Melanoma)";
+      description = "The lesion shows characteristics that warrant further investigation by a dermatologist. Asymmetry or irregular borders can be warning signs.";
+      confidence = 0.75 + Math.random() * 0.1;
+      isMalignant = true;
+    } else if (labels.includes("keratosis")) {
+      disease = "Seborrheic Keratosis";
+      description = "This is a common, non-cancerous skin growth. They often appear in middle-aged or older adults.";
+      confidence = 0.90 + Math.random() * 0.05;
+      isMalignant = false;
     }
 
-    // Filter out generic terms to find the most specific medical term
-    const bestGuess = result.webDetection.webEntities
-        .map((entity) => entity.description ? entity.description.toLowerCase() : "")
-        .find((entity) => entity && !GENERIC_TERMS.has(entity));
-
-    console.log("Best Guess after filtering:", bestGuess);
-
-    if (!bestGuess) {
-      // If only generic terms were found
-      return {
-        disease: "Analysis Inconclusive",
-        confidence: 0.75,
-        description: "The AI found only generic matches. A professional consultation is strongly recommended for an accurate diagnosis.",
-        is_malignant: false,
-      };
-    }
-
-    // Check if the best guess contains any malignancy keywords
-    const isMalignant = MALIGNANT_KEYWORDS.some((keyword) =>
-      bestGuess.includes(keyword),
-    );
-
-    // Capitalize the first letter of each word for better display
-    const diseaseName = bestGuess.replace(/\b\w/g, (char) => char.toUpperCase());
-
-    const analysisResult = {
-      disease: diseaseName,
-      confidence: isMalignant ? 0.92 : 0.88,
-      description: `The AI detected features visually similar to "${diseaseName}" based on online images. This is a preliminary analysis and not a medical diagnosis.`,
+    // Return the structured analysis result
+    return {
+      disease,
+      description,
+      confidence,
       is_malignant: isMalignant,
+      labels, // Also return the labels for debugging or more info
     };
-
-    return analysisResult;
   } catch (error) {
-    console.error("Internal function error:", error);
+    console.error("Error calling Vision API:", error);
     throw new functions.https.HttpsError(
         "internal",
-        "An error occurred while analyzing the image.",
+        "Unable to analyze the image.",
+        error,
     );
   }
 });
