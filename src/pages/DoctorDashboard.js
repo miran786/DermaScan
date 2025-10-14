@@ -1,267 +1,155 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Container,
-  Box,
-  Typography,
-  Grid,
-  Paper,
-  CircularProgress,
-  Alert,
-  Card,
-  CardContent,
-  List,
-  ListItem,
-  ListItemText,
-  Avatar,
-  ListItemAvatar,
-  Button,
-  Chip,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  TextField,
+  Container, Box, Typography, Grid, Paper, CircularProgress, List, ListItem, ListItemText, Avatar, ListItemAvatar, Button, FormControl, InputLabel, Select, MenuItem, Card, CardContent, CardActions, Divider
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
-import { CloudUpload as CloudUploadIcon, ArrowForward as ArrowForwardIcon, Edit as EditIcon, Save as SaveIcon } from '@mui/icons-material';
+import { ArrowForward as ArrowForwardIcon, FileUpload as FileUploadIcon } from '@mui/icons-material';
 import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import TaskAltIcon from '@mui/icons-material/TaskAlt';
 import PeopleIcon from '@mui/icons-material/People';
-import { collectionGroup, query, where, onSnapshot, addDoc, collection, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { httpsCallable } from "firebase/functions";
-import { db, storage, functions, auth } from '../firebase/firebase';
+import { collectionGroup, query, onSnapshot } from 'firebase/firestore';
+import { db, auth } from '../firebase/firebase';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
+import { usePatient } from '../context/PatientContext'; // Import the context hook
 
-const UploadBox = styled(Box)(({ theme }) => ({
-    border: `2px dashed ${theme.palette.primary.light}`,
-    borderRadius: theme.shape.borderRadius,
-    padding: theme.spacing(4),
-    height: '100%',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(52, 73, 94, 0.03)',
+const StatCard = styled(Paper)(({ theme }) => ({
+    padding: theme.spacing(3),
     textAlign: 'center',
-    cursor: 'pointer',
+    color: theme.palette.text.secondary,
+    height: '100%',
+    display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
+    borderRadius: theme.shape.borderRadius * 2,
+    transition: 'transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out',
     '&:hover': {
-      borderColor: theme.palette.primary.main,
-      backgroundColor: 'rgba(52, 73, 94, 0.08)',
-    },
-}));
-
-const ResultCard = styled(Card)(({ theme, isMalignant }) => ({
-    backgroundColor: isMalignant ? 'rgba(231, 76, 60, 0.1)' : 'rgba(52, 152, 219, 0.1)',
-    borderLeft: `5px solid ${isMalignant ? theme.palette.secondary.main : theme.palette.primary.main}`,
+        transform: 'translateY(-5px)',
+        boxShadow: theme.shadows[10],
+    }
 }));
 
 const DoctorDashboard = () => {
-    const [pendingScans, setPendingScans] = React.useState([]);
-    const [stats, setStats] = React.useState({ patients: 0, reviewed: 0, pending: 0 });
-    const [loading, setLoading] = React.useState(true);
-    const [error, setError] = React.useState('');
-    const [patients, setPatients] = React.useState([]);
+    const { patients, setSelectedPatient } = usePatient();
+    const [pendingScans, setPendingScans] = useState([]);
+    const [stats, setStats] = useState({ reviewed: 0, pending: 0 });
+    const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
+    const doctorName = auth.currentUser?.displayName || auth.currentUser?.email || '';
 
-    const [selectedPatientForUpload, setSelectedPatientForUpload] = React.useState('');
-    const [selectedImage, setSelectedImage] = React.useState(null);
-    const [previewUrl, setPreviewUrl] = React.useState('');
-    const [uploading, setUploading] = React.useState(false);
-    const [uploadError, setUploadError] = React.useState('');
-    const fileInputRef = React.useRef(null);
-    
-    // State for the new analysis result section
-    const [analysisResult, setAnalysisResult] = React.useState(null);
-    const [isEditing, setIsEditing] = React.useState(false);
-    const [editedResult, setEditedResult] = React.useState(null);
-    const [newlyCreatedScanId, setNewlyCreatedScanId] = React.useState(null);
-
-
-    React.useEffect(() => {
-        setLoading(true);
-        const usersQuery = query(collection(db, 'users'), where('role', '==', 'user'));
-        const unsubscribeUsers = onSnapshot(usersQuery, (qs) => setPatients(qs.docs.map(d => ({ id: d.id, ...d.data() }))));
+    useEffect(() => {
+        // This check ensures we don't try to process scans before the patient list is loaded.
+        if (patients.length === 0 && loading) {
+            // Still waiting for patient data from context
+            return;
+        }
 
         const scansQuery = query(collectionGroup(db, 'scans'));
-        const unsubscribeScans = onSnapshot(scansQuery, (qs) => {
-            const allScans = qs.docs.map(d => ({ id: d.id, patientId: d.ref.parent.parent.id, ...d.data() }));
-            const pending = allScans.filter(s => !s.status || s.status === 'Pending Review');
-            const reviewed = allScans.filter(s => s.status && s.status !== 'Pending Review');
-            setPendingScans(pending.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()));
-            setStats({ patients: patients.length, reviewed: reviewed.length, pending: pending.length });
+        const unsubscribeScans = onSnapshot(scansQuery, (querySnapshot) => {
+            const allScans = querySnapshot.docs.map(doc => ({
+                id: doc.id,
+                patientId: doc.ref.parent.parent.id,
+                ...doc.data()
+            }));
+
+            const pending = allScans.filter(scan => !scan.status || scan.status === 'Pending Review');
+            const reviewed = allScans.filter(scan => scan.status && scan.status !== 'Pending Review');
+
+            const pendingWithPatientInfo = pending.map(scan => {
+                const patientInfo = patients.find(p => p.id === scan.patientId);
+                return { ...scan, patientName: patientInfo?.displayName || patientInfo?.email || 'Unknown' };
+            }).sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+
+            setPendingScans(pendingWithPatientInfo);
+            setStats({ reviewed: reviewed.length, pending: pending.length });
             setLoading(false);
         });
 
-        return () => {
-            unsubscribeUsers();
-            unsubscribeScans();
-        };
-    }, [patients.length]);
+        return () => unsubscribeScans();
+    }, [patients, loading]); // Re-run when patients list is available or loading state changes
 
-    const handleViewPatientHistory = (patientId) => {
-        if (patientId) navigate(`/history`, { state: { patientId } });
-    };
-
-    const handlePatientSelectionForHistory = (event) => {
-        handleViewPatientHistory(event.target.value);
-    };
-
-    const handleImageChange = (event) => {
-        const file = event.target.files[0];
-        if (file && file.type.startsWith('image/')) {
-            setSelectedImage(file);
-            setPreviewUrl(URL.createObjectURL(file));
-            setUploadError('');
-            setAnalysisResult(null); // Clear previous results
-        } else {
-            setUploadError('Please select a valid image file.');
+    const handlePatientSelectAndNavigate = (patientId) => {
+        const patient = patients.find(p => p.id === patientId);
+        if(patient) {
+            setSelectedPatient(patient); // Set the global context
+            navigate(`/history`);
         }
     };
 
-    const handleAnalyzeAndUpload = async () => {
-        if (!selectedImage || !selectedPatientForUpload) {
-            setUploadError('Please select an image and a patient.');
-            return;
-        }
-        setUploading(true);
-        setUploadError('');
-        setAnalysisResult(null);
-
-        try {
-            const patientId = selectedPatientForUpload;
-            const storageRef = ref(storage, `scans/${patientId}/${Date.now()}-${selectedImage.name}`);
-            await uploadBytes(storageRef, selectedImage);
-            const downloadURL = await getDownloadURL(storageRef);
-
-            const analyzeImageFunction = httpsCallable(functions, 'analyzeImageWithGoogle');
-            const response = await analyzeImageFunction({ imageUrl: downloadURL });
-            const result = response.data;
-            
-            setAnalysisResult(result);
-            setEditedResult(result); // Initialize editing form
-
-            const scansCollectionRef = collection(db, 'users', patientId, 'scans');
-            const patientData = patients.find(p => p.id === patientId);
-            const docRef = await addDoc(scansCollectionRef, {
-                createdAt: serverTimestamp(),
-                imageUrl: downloadURL,
-                result: result,
-                status: 'Reviewed',
-                doctorNotes: `Initial AI analysis completed.`,
-                patientName: patientData?.displayName || 'Unknown',
-            });
-            setNewlyCreatedScanId(docRef.id);
-
-
-        } catch (err) {
-            setUploadError(err.message || 'An unexpected error occurred.');
-        } finally {
-            setUploading(false);
-        }
-    };
-
-    const handleSaveChanges = async () => {
-        if (!editedResult || !newlyCreatedScanId || !selectedPatientForUpload) return;
-        
-        const scanDocRef = doc(db, 'users', selectedPatientForUpload, 'scans', newlyCreatedScanId);
-        try {
-            await updateDoc(scanDocRef, {
-                result: editedResult,
-                doctorNotes: "Doctor has reviewed and updated the AI analysis."
-            });
-            setAnalysisResult(editedResult); // Update the main display
-            setIsEditing(false); // Exit editing mode
-            alert("Changes saved successfully!");
-        } catch (error) {
-            console.error("Error saving changes: ", error);
-            alert("Failed to save changes.");
-        }
-    };
-
-    const resetUploader = () => {
-        setSelectedImage(null);
-        setPreviewUrl('');
-        setSelectedPatientForUpload('');
-        setAnalysisResult(null);
-        setEditedResult(null);
-        setNewlyCreatedScanId(null);
-        setIsEditing(false);
+    if (loading) {
+        return <Box display="flex" justifyContent="center" alignItems="center" height="80vh"><CircularProgress /></Box>;
     }
 
-    if (loading) return <Box display="flex" justifyContent="center" alignItems="center" height="80vh"><CircularProgress /></Box>;
-
     return (
-        <Container sx={{ py: 8 }}>
-            <Typography variant="h3" fontWeight="bold" gutterBottom>Doctor Dashboard</Typography>
-            {/* Stats Cards */}
-            <Grid container spacing={4} sx={{ mb: 6 }}>
-                {/* ... */}
+        <Container sx={{ py: 6 }}>
+            <Typography variant="h4" component="h1" gutterBottom fontWeight="bold">
+                Welcome back, Dr. {doctorName.split('@')[0]}
+            </Typography>
+            <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 4 }}>
+                Here's a summary of your clinic's activity.
+            </Typography>
+
+            <Grid container spacing={4} sx={{ mb: 4 }}>
+                <Grid item xs={12} sm={6} md={3}><StatCard elevation={4}>
+                    <PeopleIcon color="primary" sx={{ fontSize: 40, mb: 1 }} />
+                    <Typography variant="h3" fontWeight="bold">{patients.length}</Typography>
+                    <Typography variant="h6" color="text.secondary">Total Patients</Typography>
+                </StatCard></Grid>
+                <Grid item xs={12} sm={6} md={3}><StatCard elevation={4}>
+                    <AccessTimeIcon color="error" sx={{ fontSize: 40, mb: 1 }} />
+                    <Typography variant="h3" fontWeight="bold">{stats.pending}</Typography>
+                    <Typography variant="h6" color="text.secondary">Pending Reviews</Typography>
+                </StatCard></Grid>
+                <Grid item xs={12} sm={6} md={3}><StatCard elevation={4}>
+                    <TaskAltIcon color="success" sx={{ fontSize: 40, mb: 1 }} />
+                    <Typography variant="h3" fontWeight="bold">{stats.reviewed}</Typography>
+                    <Typography variant="h6" color="text.secondary">Reviewed Scans</Typography>
+                </StatCard></Grid>
+                <Grid item xs={12} sm={6} md={3}><StatCard elevation={4} sx={{ backgroundColor: 'primary.main', color: 'white' }}>
+                    <Typography variant="h6" fontWeight="bold" sx={{ mb: 2 }}>Quick Actions</Typography>
+                    <Button variant="contained" color="inherit" startIcon={<FileUploadIcon />} onClick={() => navigate('/upload')} sx={{ backgroundColor: 'white', color: 'primary.main', '&:hover': { backgroundColor: 'grey.200' } }}>
+                        Upload New Scan
+                    </Button>
+                </StatCard></Grid>
             </Grid>
 
-            {/* Uploader and Analysis Section */}
-            <Paper elevation={12} sx={{ p: { xs: 3, md: 5 }, borderRadius: 3, mb: 6 }}>
-                <Typography variant="h5" fontWeight="bold" gutterBottom>Upload & Analyze Scan</Typography>
-                <Grid container spacing={4} alignItems="stretch">
-                    <Grid item xs={12} md={6}>
-                        <UploadBox onClick={() => fileInputRef.current.click()}>
-                            {previewUrl ? <img src={previewUrl} alt="Preview" style={{ maxWidth: '100%', maxHeight: '350px', borderRadius: '12px' }} /> : <><CloudUploadIcon sx={{ fontSize: 80, color: 'grey.600', mb: 2 }} /><Typography>Select an image</Typography></>}
-                        </UploadBox>
-                        <input type="file" ref={fileInputRef} onChange={handleImageChange} accept="image/*" style={{ display: 'none' }} />
-                    </Grid>
-                    <Grid item xs={12} md={6} display="flex" flexDirection="column" justifyContent="space-between">
-                        <div>
-                            <FormControl fullWidth sx={{ mb: 2 }}>
-                                <InputLabel>Select Patient for Upload</InputLabel>
-                                <Select value={selectedPatientForUpload} label="Select Patient for Upload" onChange={(e) => setSelectedPatientForUpload(e.target.value)}>
-                                    {patients.map((p) => <MenuItem key={p.id} value={p.id}>{p.displayName || p.email}</MenuItem>)}
-                                </Select>
-                            </FormControl>
-                            
-                            {uploadError && <Alert severity="error" sx={{ mb: 2 }}>{uploadError}</Alert>}
-
-                            {!analysisResult && (
-                                <Button variant="contained" onClick={handleAnalyzeAndUpload} disabled={uploading || !selectedImage || !selectedPatientForUpload} fullWidth size="large" endIcon={<ArrowForwardIcon />} sx={{ mt: 2, py: 1.5 }}>
-                                    {uploading ? 'Analyzing...' : 'Run AI Analysis'}
-                                </Button>
-                            )}
-                        </div>
-
-                        {uploading && <Box textAlign="center"><CircularProgress /><Typography>AI is analyzing...</Typography></Box>}
-                        
-                        {analysisResult && (
-                            <ResultCard isMalignant={analysisResult.is_malignant}>
-                                <CardContent>
-                                    {!isEditing ? (
-                                        <>
-                                            <Chip label={analysisResult.is_malignant ? "Potential Concern" : "Likely Benign"} color={analysisResult.is_malignant ? "error" : "success"} sx={{ mb: 2, fontWeight: 'bold' }} />
-                                            <Typography variant="h5" gutterBottom fontWeight="bold">{analysisResult.disease}</Typography>
-                                            <Typography variant="body1" sx={{ mb: 2 }}><strong>Confidence:</strong> {Math.round(analysisResult.confidence * 100)}%</Typography>
-                                            <Typography variant="body2" color="text.secondary">{analysisResult.description}</Typography>
-                                            <Button startIcon={<EditIcon />} onClick={() => setIsEditing(true)} sx={{mt: 2}}>Edit</Button>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <TextField label="Disease / Condition" fullWidth value={editedResult.disease} onChange={(e) => setEditedResult({...editedResult, disease: e.target.value})} sx={{mb: 2}} />
-                                            <TextField label="Description / Notes" multiline rows={3} fullWidth value={editedResult.description} onChange={(e) => setEditedResult({...editedResult, description: e.target.value})} sx={{mb: 2}} />
-                                            <Button startIcon={<SaveIcon />} variant="contained" onClick={handleSaveChanges}>Save Changes</Button>
-                                            <Button onClick={() => setIsEditing(false)} sx={{ml: 1}}>Cancel</Button>
-                                        </>
-                                    )}
-                                </CardContent>
-                            </ResultCard>
-                        )}
-                        {analysisResult && <Button onClick={resetUploader} fullWidth sx={{mt: 2}}>Upload Another Scan</Button>}
-                    </Grid>
-                </Grid>
-            </Paper>
-
-            {/* Patient History and Pending Scans */}
-            {/* ... */}
+            <Grid container spacing={4}>
+                <Grid item xs={12} md={8}><Paper elevation={4} sx={{ p: 3, borderRadius: 2 }}>
+                    <Typography variant="h5" fontWeight="bold" gutterBottom>Pending Reviews</Typography>
+                    <Divider sx={{ mb: 2 }} />
+                    {pendingScans.length > 0 ? (
+                        <List>{pendingScans.map((scan) => (
+                            <ListItem key={scan.id} secondaryAction={
+                                <Button edge="end" variant="outlined" onClick={() => handlePatientSelectAndNavigate(scan.patientId)} endIcon={<ArrowForwardIcon />}>Review</Button>
+                            } sx={{ mb: 1, borderRadius: 1, '&:hover': { backgroundColor: 'action.hover' } }}>
+                                <ListItemAvatar><Avatar src={scan.imageUrl} variant="rounded"><AssignmentIndIcon /></Avatar></ListItemAvatar>
+                                <ListItemText primary={<Typography variant="body1" fontWeight="500">{scan.patientName}</Typography>} secondary={scan.createdAt ? `Submitted ${formatDistanceToNow(scan.createdAt.toDate(), { addSuffix: true })}` : 'Date unknown'} />
+                            </ListItem>
+                        ))}</List>
+                    ) : (
+                        <Typography variant="body1" color="text.secondary" sx={{ mt: 3, textAlign: 'center' }}>All caught up! No scans are pending review.</Typography>
+                    )}
+                </Paper></Grid>
+                <Grid item xs={12} md={4}><Card elevation={4} sx={{ borderRadius: 2, height: '100%' }}>
+                    <CardContent>
+                        <Typography variant="h5" fontWeight="bold" gutterBottom>Patient Directory</Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Quickly access a patient's complete scan history.</Typography>
+                        <FormControl fullWidth>
+                            <InputLabel>Select a Patient to View History</InputLabel>
+                            <Select defaultValue="" label="Select a Patient to View History" onChange={(e) => handlePatientSelectAndNavigate(e.target.value)}>
+                                {patients.map((patient) => (
+                                    <MenuItem key={patient.id} value={patient.id}>{patient.displayName || patient.email}</MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                    </CardContent>
+                    <CardActions sx={{ justifyContent: 'center', p: 2 }}>
+                        <Button fullWidth variant="contained" startIcon={<FileUploadIcon />} onClick={() => navigate('/upload')}>Upload for a Patient</Button>
+                    </CardActions>
+                </Card></Grid>
+            </Grid>
         </Container>
     );
 };
 
 export default DoctorDashboard;
+

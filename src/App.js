@@ -5,15 +5,16 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebase/firebase';
+import { PatientProvider } from './context/PatientContext'; // Import the provider
 
 // Import Pages and Components
-// DermaScanHome is no longer needed here
 import ProfilePage from './pages/ProfilePage';
 import ScanHistoryPage from './pages/ScanHistoryPage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import Navbar from './components/Navbar';
 import DoctorDashboard from './pages/DoctorDashboard';
+import UploadPage from './pages/UploadPage';
 import { Box, CircularProgress } from '@mui/material';
 
 // --- Theme remains the same ---
@@ -60,22 +61,25 @@ function App() {
     <ThemeProvider theme={lightTheme}>
       <CssBaseline />
       <Router>
-        <Box sx={{ backgroundColor: 'background.default', minHeight: '100vh' }}>
-          <Navbar user={userProfile} onLogout={handleLogout} />
-          <Box>
-            <Routes>
-              {/* Default route redirects to dashboard if logged in, otherwise to login */}
-              <Route path="/" element={userProfile ? <Navigate to="/dashboard" /> : <Navigate to="/login" />} />
-              
-              <Route path="/dashboard" element={userProfile ? <DoctorDashboard /> : <Navigate to="/login" />} />
-              <Route path="/profile" element={userProfile ? <ProfilePage /> : <Navigate to="/login" />} />
-              <Route path="/history" element={userProfile ? <ScanHistoryPage userProfile={userProfile} /> : <Navigate to="/login" />} />
+        <PatientProvider> {/* Wrap the components with PatientProvider */}
+          <Box sx={{ backgroundColor: 'background.default', minHeight: '100vh' }}>
+            <Navbar user={userProfile} onLogout={handleLogout} />
+            <Box>
+              <Routes>
+                {/* Default route redirects to dashboard if logged in, otherwise to login */}
+                <Route path="/" element={userProfile ? <Navigate to="/dashboard" /> : <Navigate to="/login" />} />
 
-              <Route path="/login" element={userProfile ? <Navigate to="/dashboard" /> : <LoginPage />} />
-              <Route path="/signup" element={userProfile ? <Navigate to="/dashboard" /> : <SignupPage />} />
-            </Routes>
+                <Route path="/dashboard" element={userProfile?.role === 'doctor' ? <DoctorDashboard /> : <Navigate to="/history" />} />
+                <Route path="/upload" element={userProfile ? <UploadPage /> : <Navigate to="/login" />} />
+                <Route path="/profile" element={userProfile ? <ProfilePage /> : <Navigate to="/login" />} />
+                <Route path="/history" element={userProfile ? <ScanHistoryPage userProfile={userProfile} /> : <Navigate to="/login" />} />
+
+                <Route path="/login" element={userProfile ? <Navigate to="/dashboard" /> : <LoginPage />} />
+                <Route path="/signup" element={userProfile ? <Navigate to="/dashboard" /> : <SignupPage />} />
+              </Routes>
+            </Box>
           </Box>
-        </Box>
+        </PatientProvider>
       </Router>
     </ThemeProvider>
   );
