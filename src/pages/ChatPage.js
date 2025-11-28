@@ -26,13 +26,14 @@ import {
     addDoc,
     doc,
     updateDoc,
+    setDoc,
     serverTimestamp
 } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { usePatient } from '../context/PatientContext';
 
 const ChatPage = ({ userProfile }) => {
-    const { patients } = usePatient();
+    const { patients, selectedPatient } = usePatient();
     const [conversations, setConversations] = useState([]);
     const [selectedChat, setSelectedChat] = useState(null);
     const [messages, setMessages] = useState([]);
@@ -46,14 +47,36 @@ const ChatPage = ({ userProfile }) => {
         const q = query(collection(db, 'conversations'), orderBy('timestamp', 'desc'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const convs = snapshot.docs
-                .map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }))
-                // Filter: Must be in the patients list AND not the current user
+                .map(doc => {
+                    const data = doc.data();
+                    // Handle both old schema (patientId) and new schema (patientId_doctorId)
+                    let patientId = doc.id;
+                    let doctorId = null;
+
+                    if (doc.id.includes('_')) {
+                        [patientId, doctorId] = doc.id.split('_');
+                    }
+
+                    // Find patient info from context
+                    const patient = patients.find(p => p.id === patientId);
+
+                    return {
+                        id: doc.id,
+                        patientId: patientId,
+                        doctorId: doctorId,
+                        ...data,
+                        // Use name from patient profile if available, otherwise fallback to stored name or "Unknown"
+                        patientName: patient?.displayName || patient?.name || data.patientName || "Unknown Patient"
+                    };
+                })
+                // Filter: Must match current doctor ID (if composite key used) or be a valid patient
                 .filter(chat => {
-                    const isPatient = patients.some(p => p.id === chat.id);
-                    const isNotSelf = chat.id !== userProfile?.uid;
+                    // If it's a composite key, ensure it belongs to this doctor
+                    if (chat.doctorId && chat.doctorId !== DOCTOR_ID) return false;
+
+                    // Ensure it's a valid patient and not the doctor themselves
+                    const isPatient = patients.some(p => p.id === chat.patientId);
+                    const isNotSelf = chat.patientId !== userProfile?.uid;
                     return isPatient && isNotSelf;
                 });
 
@@ -63,9 +86,36 @@ const ChatPage = ({ userProfile }) => {
         return () => unsubscribe();
     }, [userProfile, patients]);
 
+    // Effect to auto-select chat based on selectedPatient
+    useEffect(() => {
+        if (selectedPatient && userProfile?.role === 'doctor') {
+            const expectedChatId = `${selectedPatient.id}_${DOCTOR_ID}`;
+            // Check for existing chat with new schema or fallback to old schema (just patientId)
+            const existingChat = conversations.find(c => c.id === expectedChatId || c.id === selectedPatient.id);
+
+            if (existingChat) {
+                setSelectedChat(existingChat);
+            } else {
+                // Prepare a temporary chat object for a new conversation
+                setSelectedChat({
+                    id: expectedChatId,
+                    patientId: selectedPatient.id,
+                    patientName: selectedPatient.displayName || selectedPatient.name || "Unknown Patient",
+                    isNew: true // Flag to indicate it's not in DB yet
+                });
+            }
+        }
+    }, [selectedPatient, conversations, userProfile]);
+
     // 2. Fetch Messages for Selected Chat (Real-time)
     useEffect(() => {
         if (!selectedChat) return;
+
+        // If it's a new (temporary) chat, don't try to fetch messages yet
+        if (selectedChat.isNew) {
+            setMessages([]);
+            return;
+        }
 
         const q = query(
             collection(db, 'conversations', selectedChat.id, 'messages'),
@@ -92,6 +142,17 @@ const ChatPage = ({ userProfile }) => {
         if (newMessage.trim() === '' || !selectedChat) return;
 
         try {
+            // Ensure parent conversation document exists
+            const conversationRef = doc(db, 'conversations', selectedChat.id);
+
+            await setDoc(conversationRef, {
+                patientName: selectedChat.patientName,
+                lastMessage: newMessage,
+                timestamp: serverTimestamp(),
+                patientId: selectedChat.patientId || selectedChat.id.split('_')[0],
+                doctorId: DOCTOR_ID
+            }, { merge: true });
+
             // Add message to sub-collection
             await addDoc(collection(db, 'conversations', selectedChat.id, 'messages'), {
                 text: newMessage,
@@ -99,13 +160,13 @@ const ChatPage = ({ userProfile }) => {
                 timestamp: serverTimestamp()
             });
 
-            // Update parent conversation with last message
-            await updateDoc(doc(db, 'conversations', selectedChat.id), {
-                lastMessage: newMessage,
-                timestamp: serverTimestamp()
-            });
-
             setNewMessage('');
+
+            // If it was new, remove the flag locally so we start fetching messages
+            if (selectedChat.isNew) {
+                setSelectedChat(prev => ({ ...prev, isNew: false }));
+            }
+
         } catch (error) {
             console.error("Error sending message: ", error);
         }
