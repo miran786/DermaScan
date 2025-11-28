@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Container, Box, Typography, Grid, Paper, CircularProgress, List, ListItem, ListItemText, Avatar, ListItemAvatar, Button, FormControl, InputLabel, Select, MenuItem, Card, CardContent, CardActions, Divider
+    Container, Box, Typography, Grid, Paper, CircularProgress, List, ListItem, ListItemText, Avatar, ListItemAvatar, Button, FormControl, InputLabel, Select, MenuItem, Card, CardContent, CardActions, Divider, Alert
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { ArrowForward as ArrowForwardIcon, FileUpload as FileUploadIcon } from '@mui/icons-material';
@@ -8,7 +8,7 @@ import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import TaskAltIcon from '@mui/icons-material/TaskAlt';
 import PeopleIcon from '@mui/icons-material/People';
-import { collectionGroup, query, onSnapshot } from 'firebase/firestore';
+import { collection, query, onSnapshot } from 'firebase/firestore';
 import { db, auth } from '../firebase/firebase';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
@@ -33,6 +33,7 @@ const DoctorDashboard = () => {
     const [pendingScans, setPendingScans] = useState([]);
     const [stats, setStats] = useState({ reviewed: 0, pending: 0 });
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null); // Add error state
     const navigate = useNavigate();
     const doctorName = auth.currentUser?.displayName || auth.currentUser?.email || '';
 
@@ -43,24 +44,41 @@ const DoctorDashboard = () => {
             return;
         }
 
-        const scansQuery = query(collectionGroup(db, 'scans'));
+        // Use simple collection query to avoid index issues with collectionGroup
+        const scansQuery = query(collection(db, 'scans'));
+
         const unsubscribeScans = onSnapshot(scansQuery, (querySnapshot) => {
             const allScans = querySnapshot.docs.map(doc => ({
                 id: doc.id,
-                patientId: doc.ref.parent.parent.id,
+                patientId: doc.data().userId, // Fix: Use userId from data, not parent path
                 ...doc.data()
             }));
+
+            console.log("DoctorDashboard: Fetched " + allScans.length + " total scans.");
 
             const pending = allScans.filter(scan => !scan.status || scan.status === 'Pending Review');
             const reviewed = allScans.filter(scan => scan.status && scan.status !== 'Pending Review');
 
+            console.log("DoctorDashboard: Pending scans:", pending.length);
+            console.log("DoctorDashboard: Reviewed scans:", reviewed.length);
+
             const pendingWithPatientInfo = pending.map(scan => {
                 const patientInfo = patients.find(p => p.id === scan.patientId);
                 return { ...scan, patientName: patientInfo?.displayName || patientInfo?.email || 'Unknown' };
-            }).sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+            }).sort((a, b) => {
+                const timeA = a.timestamp ? a.timestamp.toMillis() : 0;
+                const timeB = b.timestamp ? b.timestamp.toMillis() : 0;
+                return timeB - timeA;
+            });
+
+            console.log("DoctorDashboard: Pending with info:", pendingWithPatientInfo);
 
             setPendingScans(pendingWithPatientInfo);
             setStats({ reviewed: reviewed.length, pending: pending.length });
+            setLoading(false);
+        }, (err) => {
+            console.error("DoctorDashboard: Error fetching scans:", err);
+            setError("Failed to load scans. " + err.message);
             setLoading(false);
         });
 
@@ -69,7 +87,7 @@ const DoctorDashboard = () => {
 
     const handlePatientSelectAndNavigate = (patientId) => {
         const patient = patients.find(p => p.id === patientId);
-        if(patient) {
+        if (patient) {
             setSelectedPatient(patient); // Set the global context
             navigate(`/history`);
         }
@@ -87,6 +105,8 @@ const DoctorDashboard = () => {
             <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 4 }}>
                 Here's a summary of your clinic's activity.
             </Typography>
+
+            {error && <Alert severity="error" sx={{ mb: 4 }}>{error}</Alert>}
 
             <Grid container spacing={4} sx={{ mb: 4 }}>
                 <Grid item xs={12} sm={6} md={3}><StatCard elevation={4}>
@@ -122,7 +142,7 @@ const DoctorDashboard = () => {
                                 <Button edge="end" variant="outlined" onClick={() => handlePatientSelectAndNavigate(scan.patientId)} endIcon={<ArrowForwardIcon />}>Review</Button>
                             } sx={{ mb: 1, borderRadius: 1, '&:hover': { backgroundColor: 'action.hover' } }}>
                                 <ListItemAvatar><Avatar src={scan.imageUrl} variant="rounded"><AssignmentIndIcon /></Avatar></ListItemAvatar>
-                                <ListItemText primary={<Typography variant="body1" fontWeight="500">{scan.patientName}</Typography>} secondary={scan.createdAt ? `Submitted ${formatDistanceToNow(scan.createdAt.toDate(), { addSuffix: true })}` : 'Date unknown'} />
+                                <ListItemText primary={<Typography variant="body1" fontWeight="500">{scan.patientName}</Typography>} secondary={scan.timestamp ? `Submitted ${formatDistanceToNow(scan.timestamp.toDate(), { addSuffix: true })}` : 'Date unknown'} />
                             </ListItem>
                         ))}</List>
                     ) : (
@@ -152,4 +172,3 @@ const DoctorDashboard = () => {
 };
 
 export default DoctorDashboard;
-

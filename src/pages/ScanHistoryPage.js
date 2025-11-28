@@ -1,147 +1,318 @@
 import React, { useState, useEffect } from 'react';
+import { db } from '../firebase/firebase';
+import { collection, query, where, getDocs, orderBy, doc, updateDoc } from 'firebase/firestore';
 import {
-  Container, Typography, List, ListItem, ListItemText, CircularProgress, Alert, Paper, Grid, Box, Button, Chip, Divider
+    Container,
+    Typography,
+    Grid,
+    Card,
+    CardMedia,
+    CardContent,
+    Chip,
+    Box,
+    CircularProgress,
+    Divider,
+    Button,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    TextField,
+    FormControl,
+    InputLabel,
+    Select,
+    MenuItem
 } from '@mui/material';
-import { collection, onSnapshot, query, orderBy, doc, updateDoc } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions'; // Import functions
-import { db, functions } from '../firebase/firebase'; // Import db and functions
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import EditIcon from '@mui/icons-material/Edit';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import { format } from 'date-fns';
 import { usePatient } from '../context/PatientContext';
-import { Science as ScienceIcon } from '@mui/icons-material';
 
-const ScanHistoryPage = () => {
+const ScanHistoryPage = ({ userProfile }) => {
     const { selectedPatient } = usePatient();
     const [scans, setScans] = useState([]);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
-    const [analyzingId, setAnalyzingId] = useState(null); // To track which scan is being analyzed
+    const [loading, setLoading] = useState(true);
+
+    // Dialog State
+    const [openDialog, setOpenDialog] = useState(false);
+    const [selectedScan, setSelectedScan] = useState(null);
+    const [correctionData, setCorrectionData] = useState({
+        prediction: '',
+        severity: '',
+        notes: ''
+    });
 
     useEffect(() => {
-        if (selectedPatient) {
-            setLoading(true);
-            const scansCollectionRef = collection(db, 'users', selectedPatient.id, 'scans');
-            const q = query(scansCollectionRef, orderBy('createdAt', 'desc'));
+        const fetchScans = async () => {
+            if (!userProfile) return;
 
-            const unsubscribe = onSnapshot(q, (snapshot) => {
-                const scansData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                setScans(scansData);
+            let targetUserId = userProfile.uid;
+
+            // If doctor, use the selected patient's ID
+            if (userProfile.role === 'doctor') {
+                if (selectedPatient) {
+                    targetUserId = selectedPatient.id;
+                } else {
+                    // If doctor but no patient selected, show empty
+                    setScans([]);
+                    setLoading(false);
+                    return;
+                }
+            }
+
+            try {
+                // Query without orderBy to avoid needing a composite index
+                const q = query(
+                    collection(db, 'scans'),
+                    where('userId', '==', targetUserId)
+                );
+                console.log("ScanHistoryPage: Querying scans for userId:", targetUserId);
+
+                const querySnapshot = await getDocs(q);
+                console.log("ScanHistoryPage: Found " + querySnapshot.size + " scans.");
+
+                const scanData = querySnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+
+                // Sort client-side
+                scanData.sort((a, b) => {
+                    const timeA = a.timestamp ? a.timestamp.toMillis() : 0;
+                    const timeB = b.timestamp ? b.timestamp.toMillis() : 0;
+                    return timeB - timeA;
+                });
+
+                console.log("ScanHistoryPage: Scans after sort:", scanData);
+
+                setScans(scanData);
+            } catch (error) {
+                console.error("Error fetching scans: ", error);
+            } finally {
                 setLoading(false);
-            }, (err) => {
-                setError('Failed to fetch scan history. Please try again later.');
-                setLoading(false);
-                console.error(err);
-            });
+            }
+        };
 
-            return () => unsubscribe();
-        } else {
-            setScans([]);
-        }
-    }, [selectedPatient]);
+        fetchScans();
+    }, [userProfile, selectedPatient]);
 
-    // This is the new function to handle the AI analysis
-    const handleAnalyzeScan = async (scanId, imageUrl) => {
-        if (!selectedPatient) return;
-        setAnalyzingId(scanId); // Set loading state for this specific scan
+    const handleEditClick = (scan) => {
+        setSelectedScan(scan);
+        setCorrectionData({
+            prediction: scan.correctedResult?.prediction || scan.result?.prediction || '',
+            severity: scan.correctedResult?.severity || scan.result?.severity || '',
+            notes: scan.doctorNotes || ''
+        });
+        setOpenDialog(true);
+    };
+
+    const handleCloseDialog = () => {
+        setOpenDialog(false);
+        setSelectedScan(null);
+    };
+
+    const handleSaveCorrection = async () => {
+        if (!selectedScan) return;
+
         try {
-            const analyzeImageFunction = httpsCallable(functions, 'analyzeImageWithGoogle');
-            const response = await analyzeImageFunction({ imageUrl });
-            const result = response.data;
+            const scanRef = doc(db, 'scans', selectedScan.id);
 
-            // Update the document in Firestore with the new analysis result
-            const scanDocRef = doc(db, 'users', selectedPatient.id, 'scans', scanId);
-            await updateDoc(scanDocRef, {
-                result: result,
-                status: 'Reviewed',
-                doctorNotes: 'AI analysis completed from history page.'
-            });
+            const updateData = {
+                doctorNotes: correctionData.notes,
+                isCorrected: true,
+                correctedResult: {
+                    prediction: correctionData.prediction,
+                    severity: correctionData.severity,
+                    timestamp: new Date()
+                }
+            };
 
-        } catch (err) {
-            console.error("Analysis failed: ", err);
-            alert("An error occurred during analysis. Please check the console.");
-        } finally {
-            setAnalyzingId(null); // Reset loading state
+            await updateDoc(scanRef, updateData);
+
+            // Update local state
+            setScans(prevScans => prevScans.map(scan =>
+                scan.id === selectedScan.id
+                    ? { ...scan, ...updateData }
+                    : scan
+            ));
+
+            handleCloseDialog();
+        } catch (error) {
+            console.error("Error updating scan: ", error);
         }
     };
 
-    if (!selectedPatient) {
+    if (loading) {
         return (
-            <Container sx={{ py: 4 }}>
-                <Alert severity="info">Please select a patient from the dashboard to view their scan history.</Alert>
-            </Container>
+            <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
+                <CircularProgress />
+            </Box>
         );
     }
 
     return (
-        <Container sx={{ py: 4, backgroundColor: '#f4f6f8', minHeight: '100vh' }}>
-            <Typography variant="h4" gutterBottom fontWeight="bold" color="primary.main">
-                Scan History for {selectedPatient.displayName || selectedPatient.email}
-            </Typography>
-            {loading && <CircularProgress />}
-            {error && <Alert severity="error">{error}</Alert>}
-            {!loading && scans.length === 0 && (
-                <Typography>No scan history found for this patient.</Typography>
-            )}
-            <List>
-                {scans.map((scan) => (
-                    <Paper key={scan.id} elevation={3} sx={{ mb: 3, borderRadius: '12px' }}>
-                        <ListItem sx={{ p: 3 }}>
-                            <Grid container spacing={3} alignItems="center">
-                                <Grid item xs={12} md={4}>
-                                    <Box sx={{ borderRadius: '8px', overflow: 'hidden' }}>
-                                        <img src={scan.imageUrl} alt="Scan" style={{ width: '100%', height: 'auto', display: 'block' }} />
-                                    </Box>
-                                </Grid>
-                                <Grid item xs={12} md={8}>
-                                    <ListItemText
-                                        primary={
-                                            <Typography variant="h6" fontWeight="bold">
-                                                Scan taken on: {scan.createdAt ? new Date(scan.createdAt.seconds * 1000).toLocaleDateString() : 'N/A'}
-                                            </Typography>
-                                        }
-                                        secondary={
-                                            <>
-                                                <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 2 }}>
-                                                    Status: <Chip label={scan.status || 'Unknown'} size="small" color={scan.status === 'Pending Review' ? 'warning' : 'success'} />
-                                                </Typography>
-                                                <Divider sx={{ my: 2 }} />
-                                                
-                                                {/* THIS IS THE NEW LOGIC */}
-                                                {scan.result && scan.result.disease === 'Awaiting Analysis' ? (
-                                                    <Box>
-                                                        <Typography variant="body1" sx={{ fontStyle: 'italic', color: 'text.secondary', mb: 2 }}>
-                                                            This scan has not yet been analyzed by the AI.
-                                                        </Typography>
-                                                        <Button
-                                                            variant="contained"
-                                                            startIcon={analyzingId === scan.id ? <CircularProgress size={20} color="inherit" /> : <ScienceIcon />}
-                                                            onClick={() => handleAnalyzeScan(scan.id, scan.imageUrl)}
-                                                            disabled={analyzingId === scan.id}
-                                                        >
-                                                            {analyzingId === scan.id ? 'Analyzing...' : 'Analyze Now'}
-                                                        </Button>
-                                                    </Box>
-                                                ) : (
-                                                    <Box>
-                                                        <Chip 
-                                                            label={scan.result?.is_malignant ? "Potential Concern" : "Likely Benign"} 
-                                                            color={scan.result?.is_malignant ? "error" : "success"} 
-                                                            sx={{ mb: 1.5, fontWeight: 'bold' }} 
-                                                        />
-                                                        <Typography variant="h5" gutterBottom>{scan.result?.disease}</Typography>
-                                                        <Typography variant="body1" sx={{ mb: 1 }}>
-                                                            <strong>Confidence:</strong> {scan.result?.confidence ? `${Math.round(scan.result.confidence * 100)}%` : 'N/A'}
-                                                        </Typography>
-                                                        <Typography variant="body2" color="text.secondary">{scan.result?.description}</Typography>
-                                                    </Box>
-                                                )}
-                                            </>
-                                        }
+        <Container maxWidth="lg" sx={{ py: 6 }}>
+            <Box sx={{ mb: 5 }}>
+                <Typography variant="h3" fontWeight="bold" color="primary" gutterBottom>
+                    Scan History
+                </Typography>
+                <Typography variant="h6" color="text.secondary">
+                    View your past skin analysis results and track changes over time.
+                </Typography>
+            </Box>
+
+            {scans.length === 0 ? (
+                <Box sx={{ textAlign: 'center', py: 8, bgcolor: 'background.paper', borderRadius: 4 }}>
+                    <Typography variant="h5" color="text.secondary">No scans found.</Typography>
+                    <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
+                        {userProfile?.role === 'doctor'
+                            ? "Select a patient to view their history."
+                            : "Upload a new image to get started."}
+                    </Typography>
+                </Box>
+            ) : (
+                <Grid container spacing={4}>
+                    {scans.map((scan) => {
+                        // Determine which result to show (Corrected takes precedence)
+                        const displayResult = scan.isCorrected ? scan.correctedResult : scan.result;
+                        const isCorrected = scan.isCorrected;
+
+                        return (
+                            <Grid item key={scan.id} xs={12} sm={6} md={4}>
+                                <Card sx={{
+                                    height: '100%',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    transition: 'transform 0.2s',
+                                    '&:hover': {
+                                        transform: 'translateY(-4px)',
+                                        boxShadow: 6
+                                    },
+                                    position: 'relative',
+                                    border: isCorrected ? '2px solid #009688' : 'none' // Highlight corrected scans
+                                }}>
+                                    {isCorrected && (
+                                        <Box sx={{
+                                            position: 'absolute',
+                                            top: 12,
+                                            right: 12,
+                                            bgcolor: 'white',
+                                            borderRadius: '50%',
+                                            p: 0.5,
+                                            boxShadow: 2,
+                                            zIndex: 1
+                                        }}>
+                                            <CheckCircleIcon color="primary" />
+                                        </Box>
+                                    )}
+
+                                    <CardMedia
+                                        component="img"
+                                        height="200"
+                                        image={scan.imageUrl}
+                                        alt="Scan result"
+                                        sx={{ objectFit: 'cover' }}
                                     />
-                                </Grid>
+                                    <CardContent sx={{ flexGrow: 1, p: 3 }}>
+                                        <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                                            <Chip
+                                                label={displayResult?.prediction || "Unknown"}
+                                                color={displayResult?.severity === 'High' ? "error" : "success"}
+                                                variant={isCorrected ? "filled" : "outlined"} // Filled for verified/corrected
+                                                size="small"
+                                                sx={{ fontWeight: 600 }}
+                                            />
+                                            <Typography variant="caption" color="text.secondary" display="flex" alignItems="center">
+                                                <CalendarTodayIcon fontSize="inherit" sx={{ mr: 0.5 }} />
+                                                {scan.timestamp ? format(scan.timestamp.toDate(), 'MMM dd, yyyy') : 'N/A'}
+                                            </Typography>
+                                        </Box>
+
+                                        <Divider sx={{ my: 1.5 }} />
+
+                                        {!isCorrected && (
+                                            <Typography variant="body2" color="text.secondary" paragraph>
+                                                <strong>Confidence:</strong> {displayResult?.confidence ? (displayResult.confidence * 100).toFixed(1) + '%' : 'N/A'}
+                                            </Typography>
+                                        )}
+
+                                        {scan.doctorNotes && (
+                                            <Box sx={{ mt: 2, p: 1.5, bgcolor: 'grey.50', borderRadius: 2 }}>
+                                                <Typography variant="caption" fontWeight="bold" color="primary" display="block" gutterBottom>
+                                                    Doctor's Note:
+                                                </Typography>
+                                                <Typography variant="body2" color="text.primary">
+                                                    {scan.doctorNotes}
+                                                </Typography>
+                                            </Box>
+                                        )}
+
+                                        {/* Doctor Actions */}
+                                        {userProfile?.role === 'doctor' && (
+                                            <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
+                                                <Button
+                                                    startIcon={<EditIcon />}
+                                                    size="small"
+                                                    variant="outlined"
+                                                    onClick={() => handleEditClick(scan)}
+                                                >
+                                                    {isCorrected ? "Edit Correction" : "Correct Diagnosis"}
+                                                </Button>
+                                            </Box>
+                                        )}
+                                    </CardContent>
+                                </Card>
                             </Grid>
-                        </ListItem>
-                    </Paper>
-                ))}
-            </List>
+                        );
+                    })}
+                </Grid>
+            )}
+
+            {/* Edit Diagnosis Dialog */}
+            <Dialog open={openDialog} onClose={handleCloseDialog} fullWidth maxWidth="sm">
+                <DialogTitle>
+                    {selectedScan?.isCorrected ? "Edit Correction" : "Correct Diagnosis"}
+                </DialogTitle>
+                <DialogContent>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, mt: 1 }}>
+                        <TextField
+                            label="Diagnosis / Prediction"
+                            fullWidth
+                            value={correctionData.prediction}
+                            onChange={(e) => setCorrectionData({ ...correctionData, prediction: e.target.value })}
+                        />
+
+                        <FormControl fullWidth>
+                            <InputLabel>Severity</InputLabel>
+                            <Select
+                                value={correctionData.severity}
+                                label="Severity"
+                                onChange={(e) => setCorrectionData({ ...correctionData, severity: e.target.value })}
+                            >
+                                <MenuItem value="Low">Low</MenuItem>
+                                <MenuItem value="Medium">Medium</MenuItem>
+                                <MenuItem value="High">High</MenuItem>
+                            </Select>
+                        </FormControl>
+
+                        <TextField
+                            label="Doctor's Notes"
+                            fullWidth
+                            multiline
+                            rows={4}
+                            value={correctionData.notes}
+                            onChange={(e) => setCorrectionData({ ...correctionData, notes: e.target.value })}
+                        />
+                    </Box>
+                </DialogContent>
+                <DialogActions sx={{ p: 3 }}>
+                    <Button onClick={handleCloseDialog} color="inherit">Cancel</Button>
+                    <Button onClick={handleSaveCorrection} variant="contained" color="primary">
+                        Save Correction
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Container>
     );
 };

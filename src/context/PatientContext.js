@@ -14,17 +14,23 @@ export const PatientProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const usersQuery = query(collection(db, 'users'), where('role', '==', 'user'));
-        
+        // Query all users for debugging purposes
+        const usersQuery = query(collection(db, 'users'));
+
         const unsubscribe = onSnapshot(usersQuery, (querySnapshot) => {
+            console.log("PatientContext: Fetching patients...");
+            console.log("PatientContext: Found " + querySnapshot.size + " documents.");
+
             const patientList = querySnapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
             }));
+
+            console.log("PatientContext: Patient list:", patientList);
             setPatients(patientList);
             setLoading(false);
         }, (error) => {
-            console.error("Error fetching patients:", error);
+            console.error("PatientContext: Error fetching patients:", error);
             setLoading(false);
         });
 

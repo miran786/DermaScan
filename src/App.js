@@ -17,11 +17,7 @@ import DoctorDashboard from './pages/DoctorDashboard';
 import UploadPage from './pages/UploadPage';
 import { Box, CircularProgress } from '@mui/material';
 
-// --- Theme remains the same ---
-let lightTheme = createTheme({
-    // ... theme styles
-});
-lightTheme = responsiveFontSizes(lightTheme);
+import theme from './theme';
 
 function App() {
   const [userProfile, setUserProfile] = useState(null);
@@ -58,7 +54,7 @@ function App() {
   }
 
   return (
-    <ThemeProvider theme={lightTheme}>
+    <ThemeProvider theme={theme}>
       <CssBaseline />
       <Router>
         <PatientProvider> {/* Wrap the components with PatientProvider */}
