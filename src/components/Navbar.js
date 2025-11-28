@@ -1,7 +1,9 @@
 import React from 'react';
-import { AppBar, Toolbar, Typography, Button, Box, FormControl, Select, MenuItem, InputLabel, Container, useScrollTrigger, Slide } from '@mui/material';
+import { AppBar, Toolbar, Typography, Button, Box, FormControl, Select, MenuItem, InputLabel, Container, useScrollTrigger, Slide, IconButton } from '@mui/material';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import MedicalInformationIcon from '@mui/icons-material/MedicalInformation';
+import Brightness4Icon from '@mui/icons-material/Brightness4';
+import Brightness7Icon from '@mui/icons-material/Brightness7';
 import { usePatient } from '../context/PatientContext';
 
 function HideOnScroll(props) {
@@ -17,7 +19,7 @@ function HideOnScroll(props) {
   );
 }
 
-const Navbar = ({ user, onLogout, window }) => {
+const Navbar = ({ user, onLogout, window, mode, toggleTheme }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { patients, selectedPatient, setSelectedPatient, loading } = usePatient();
@@ -38,7 +40,7 @@ const Navbar = ({ user, onLogout, window }) => {
 
   return (
     <HideOnScroll window={window}>
-      <AppBar position="sticky" color="default" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider', backgroundColor: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(20px)' }}>
+      <AppBar position="sticky" color="default" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider', backgroundColor: mode === 'dark' ? 'rgba(30,30,30,0.8)' : 'rgba(255,255,255,0.8)', backdropFilter: 'blur(20px)' }}>
         <Container maxWidth="xl">
           <Toolbar disableGutters>
             <Box display="flex" alignItems="center" component={Link} to="/dashboard" sx={{ textDecoration: 'none', color: 'text.primary', mr: 4 }}>
@@ -81,8 +83,12 @@ const Navbar = ({ user, onLogout, window }) => {
 
             <Box sx={{ flexGrow: 1 }} />
 
+            <IconButton sx={{ ml: 1 }} onClick={toggleTheme} color="inherit">
+              {mode === 'dark' ? <Brightness7Icon /> : <Brightness4Icon />}
+            </IconButton>
+
             {user ? (
-              <Box sx={{ display: 'flex', gap: 1 }}>
+              <Box sx={{ display: 'flex', gap: 1, ml: 2 }}>
                 {user.role === 'doctor' && (
                   <Button
                     color={isActive('/dashboard') ? "primary" : "inherit"}
@@ -127,7 +133,7 @@ const Navbar = ({ user, onLogout, window }) => {
                 </Button>
               </Box>
             ) : (
-              <Box sx={{ display: 'flex', gap: 2 }}>
+              <Box sx={{ display: 'flex', gap: 2, ml: 2 }}>
                 <Button color="inherit" component={Link} to="/login" sx={{ fontWeight: 600 }}>Login</Button>
                 <Button variant="contained" color="primary" component={Link} to="/signup" sx={{ borderRadius: 50, px: 4, boxShadow: '0 4px 14px 0 rgba(0,150,136,0.39)' }}>Sign Up</Button>
               </Box>

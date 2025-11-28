@@ -17,11 +17,18 @@ import DoctorDashboard from './pages/DoctorDashboard';
 import UploadPage from './pages/UploadPage';
 import { Box, CircularProgress } from '@mui/material';
 
-import theme from './theme';
+import getTheme from './theme';
 
 function App() {
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [mode, setMode] = useState('light');
+
+  const theme = React.useMemo(() => getTheme(mode), [mode]);
+
+  const toggleTheme = () => {
+    setMode((prevMode) => (prevMode === 'light' ? 'dark' : 'light'));
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -59,7 +66,7 @@ function App() {
       <Router>
         <PatientProvider> {/* Wrap the components with PatientProvider */}
           <Box sx={{ backgroundColor: 'background.default', minHeight: '100vh' }}>
-            <Navbar user={userProfile} onLogout={handleLogout} />
+            <Navbar user={userProfile} onLogout={handleLogout} mode={mode} toggleTheme={toggleTheme} />
             <Box>
               <Routes>
                 {/* Default route redirects to dashboard if logged in, otherwise to login */}
