@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase/firebase';
+import { db, storage } from '../firebase/firebase';
 import { collection, query, where, getDocs, orderBy, doc, updateDoc } from 'firebase/firestore';
+import { ref, uploadBytes } from 'firebase/storage';
 import {
     Container,
     Typography,
@@ -123,6 +124,8 @@ const ScanHistoryPage = ({ userProfile }) => {
         try {
             const scanRef = doc(db, 'scans', selectedScan.id);
 
+            console.log("Saving correction with data:", JSON.stringify(correctionData));
+
             const updateData = {
                 doctorNotes: correctionData.notes,
                 isCorrected: true,
@@ -134,7 +137,28 @@ const ScanHistoryPage = ({ userProfile }) => {
                 }
             };
 
+            console.log("Update payload:", JSON.stringify(updateData));
+
             await updateDoc(scanRef, updateData);
+
+            // FEEDBACK LOOP: Copy image to labeled training data folder
+            try {
+                // We need to fetch the blob from the existing URL to re-upload it
+                // Note: This requires CORS configuration on the bucket to allow fetch from the app domain
+                const response = await fetch(selectedScan.imageUrl);
+                const blob = await response.blob();
+
+                // Sanitize prediction label for folder name (remove spaces/special chars)
+                const labelFolder = correctionData.prediction.replace(/[^a-zA-Z0-9]/g, '_');
+
+                // Use a clean filename or generate a new one
+                const trainingRef = ref(storage, `training_data/${labelFolder}/${Date.now()}_corrected.jpg`);
+
+                await uploadBytes(trainingRef, blob);
+                console.log(`Corrected scan saved to training_data/${labelFolder}`);
+            } catch (trainingError) {
+                console.error("Failed to save to training data (CORS or Perms):", trainingError);
+            }
 
             // Update local state
             setScans(prevScans => prevScans.map(scan =>
@@ -207,7 +231,7 @@ const ScanHistoryPage = ({ userProfile }) => {
                         const isCorrected = scan.isCorrected;
 
                         return (
-                            <Grid item key={scan.id} xs={12} sm={6} md={4}>
+                            <Grid key={scan.id} xs={12} sm={6} md={4}>
                                 <Card sx={{
                                     height: '100%',
                                     display: 'flex',
@@ -290,11 +314,11 @@ const ScanHistoryPage = ({ userProfile }) => {
                                             </Box>
                                         )}
                                     </CardContent>
-                                </Card>
-                            </Grid>
+                                </Card >
+                            </Grid >
                         );
                     })}
-                </Grid>
+                </Grid >
             )}
         </>
     );
@@ -335,6 +359,7 @@ const ScanHistoryPage = ({ userProfile }) => {
                                 <MenuItem value="Low">Low</MenuItem>
                                 <MenuItem value="Medium">Medium</MenuItem>
                                 <MenuItem value="High">High</MenuItem>
+                                <MenuItem value="Unknown">Unknown</MenuItem>
                             </Select>
                         </FormControl>
 

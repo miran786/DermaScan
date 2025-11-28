@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { storage, db, auth } from '../firebase/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 import {
     Container,
     Typography,
@@ -37,6 +37,15 @@ const UploadPage = () => {
         }
     };
 
+    // Helper to calculate SHA-256 hash of the file
+    const calculateImageHash = async (file) => {
+        const buffer = await file.arrayBuffer();
+        const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        return hashHex;
+    };
+
     const handleUpload = async () => {
         if (!image) return;
 
@@ -53,13 +62,33 @@ const UploadPage = () => {
         setError('');
 
         try {
+            // 1. Calculate Image Hash
+            const imageHash = await calculateImageHash(image);
+            console.log("Calculated image hash:", imageHash);
+
+            // 2. Check for existing corrected scan with this hash
+            const q = query(
+                collection(db, 'scans'),
+                where('imageHash', '==', imageHash),
+                where('isCorrected', '==', true)
+            );
+
+            // 3. Proceed with Upload if no match
             const storageRef = ref(storage, `scans/${patientId}/${Date.now()}_${image.name}`);
-            await uploadBytes(storageRef, image);
+            const uploadResult = await uploadBytes(storageRef, image);
             const url = await getDownloadURL(storageRef);
 
             // --- SIMULATED AI ANALYSIS ---
             // In a real app, you might call a Cloud Function here or wait for a trigger.
-            const simulatedResult = {
+            // Randomly simulate low confidence for testing purposes
+            const isLowConfidence = Math.random() < 0.3;
+
+            const simulatedResult = isLowConfidence ? {
+                prediction: "Uncertain / Inconclusive",
+                confidence: 0.45,
+                severity: "Unknown",
+                recommendation: "Image quality may be poor or condition is unclear. Please retake or consult a doctor."
+            } : {
                 prediction: "Benign Keratosis",
                 confidence: 0.92,
                 severity: "Low",
@@ -67,9 +96,23 @@ const UploadPage = () => {
             };
             // -----------------------------
 
+            // FEEDBACK LOOP: If confidence is low, save to training data for labeling
+            if (simulatedResult.confidence < 0.7) {
+                try {
+                    const trainingRef = ref(storage, `training_data/needs_label/${Date.now()}_${image.name}`);
+                    // We can re-upload the file directly since we have the 'image' object
+                    await uploadBytes(trainingRef, image);
+                    console.log("Low confidence scan saved to training_data/needs_label");
+                } catch (trainingError) {
+                    console.error("Failed to save to training data:", trainingError);
+                    // Don't block the main flow if this fails
+                }
+            }
+
             await addDoc(collection(db, 'scans'), {
                 userId: patientId, // Associate scan with the patient
                 imageUrl: url,
+                imageHash: imageHash, // Save hash for future lookups
                 timestamp: serverTimestamp(),
                 result: simulatedResult,
                 doctorNotes: "" // Initialize empty notes
