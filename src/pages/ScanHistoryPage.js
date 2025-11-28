@@ -28,11 +28,16 @@ import EditIcon from '@mui/icons-material/Edit';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { format } from 'date-fns';
 import { usePatient } from '../context/PatientContext';
+import TimeLapseViewer from '../components/TimeLapseViewer';
+import { ToggleButton, ToggleButtonGroup } from '@mui/material';
+import ViewTimelineIcon from '@mui/icons-material/ViewTimeline';
+import ViewModuleIcon from '@mui/icons-material/ViewModule';
 
 const ScanHistoryPage = ({ userProfile }) => {
     const { selectedPatient } = usePatient();
     const [scans, setScans] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'timeline'
 
     // Dialog State
     const [openDialog, setOpenDialog] = useState(false);
@@ -121,6 +126,7 @@ const ScanHistoryPage = ({ userProfile }) => {
             const updateData = {
                 doctorNotes: correctionData.notes,
                 isCorrected: true,
+                status: 'Reviewed', // Update status to Reviewed so it clears from dashboard
                 correctedResult: {
                     prediction: correctionData.prediction,
                     severity: correctionData.severity,
@@ -151,8 +157,8 @@ const ScanHistoryPage = ({ userProfile }) => {
         );
     }
 
-    return (
-        <Container maxWidth="lg" sx={{ py: 6 }}>
+    const content = (
+        <>
             <Box sx={{ mb: 5 }}>
                 <Typography variant="h3" fontWeight="bold" color="primary" gutterBottom>
                     Scan History
@@ -160,6 +166,26 @@ const ScanHistoryPage = ({ userProfile }) => {
                 <Typography variant="h6" color="text.secondary">
                     View your past skin analysis results and track changes over time.
                 </Typography>
+            </Box>
+
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+                <Typography variant="h6" color="text.secondary">
+                    {scans.length} scans found
+                </Typography>
+                <ToggleButtonGroup
+                    value={viewMode}
+                    exclusive
+                    onChange={(e, newMode) => { if (newMode) setViewMode(newMode); }}
+                    aria-label="view mode"
+                    size="small"
+                >
+                    <ToggleButton value="grid" aria-label="grid view">
+                        <ViewModuleIcon sx={{ mr: 1 }} /> Grid
+                    </ToggleButton>
+                    <ToggleButton value="timeline" aria-label="timeline view">
+                        <ViewTimelineIcon sx={{ mr: 1 }} /> Time Lapse
+                    </ToggleButton>
+                </ToggleButtonGroup>
             </Box>
 
             {scans.length === 0 ? (
@@ -171,6 +197,8 @@ const ScanHistoryPage = ({ userProfile }) => {
                             : "Upload a new image to get started."}
                     </Typography>
                 </Box>
+            ) : viewMode === 'timeline' ? (
+                <TimeLapseViewer scans={scans} />
             ) : (
                 <Grid container spacing={4}>
                     {scans.map((scan) => {
@@ -268,6 +296,20 @@ const ScanHistoryPage = ({ userProfile }) => {
                     })}
                 </Grid>
             )}
+        </>
+    );
+
+    return (
+        <>
+            {viewMode === 'timeline' ? (
+                <Box sx={{ width: '100%', px: 3, py: 6 }}>
+                    {content}
+                </Box>
+            ) : (
+                <Container maxWidth="lg" sx={{ py: 6 }}>
+                    {content}
+                </Container>
+            )}
 
             {/* Edit Diagnosis Dialog */}
             <Dialog open={openDialog} onClose={handleCloseDialog} fullWidth maxWidth="sm">
@@ -313,7 +355,7 @@ const ScanHistoryPage = ({ userProfile }) => {
                     </Button>
                 </DialogActions>
             </Dialog>
-        </Container>
+        </>
     );
 };
 
