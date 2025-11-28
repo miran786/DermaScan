@@ -90,14 +90,24 @@ const Navbar = ({ user, onLogout, window, mode, toggleTheme }) => {
             {user ? (
               <Box sx={{ display: 'flex', gap: 1, ml: 2 }}>
                 {user.role === 'doctor' && (
-                  <Button
-                    color={isActive('/dashboard') ? "primary" : "inherit"}
-                    component={Link}
-                    to="/dashboard"
-                    variant={isActive('/dashboard') ? "soft" : "text"}
-                  >
-                    Dashboard
-                  </Button>
+                  <>
+                    <Button
+                      color={isActive('/dashboard') ? "primary" : "inherit"}
+                      component={Link}
+                      to="/dashboard"
+                      variant={isActive('/dashboard') ? "soft" : "text"}
+                    >
+                      Dashboard
+                    </Button>
+                    <Button
+                      color={isActive('/chat') ? "primary" : "inherit"}
+                      component={Link}
+                      to="/chat"
+                      variant={isActive('/chat') ? "soft" : "text"}
+                    >
+                      Chat
+                    </Button>
+                  </>
                 )}
                 <Button
                   color={isActive('/upload') ? "primary" : "inherit"}

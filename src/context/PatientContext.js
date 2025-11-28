@@ -14,8 +14,8 @@ export const PatientProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Query all users for debugging purposes
-        const usersQuery = query(collection(db, 'users'));
+        // Query only users with role 'patient'
+        const usersQuery = query(collection(db, 'users'), where('role', '==', 'patient'));
 
         const unsubscribe = onSnapshot(usersQuery, (querySnapshot) => {
             console.log("PatientContext: Fetching patients...");

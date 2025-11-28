@@ -15,6 +15,7 @@ import SignupPage from './pages/SignupPage';
 import Navbar from './components/Navbar';
 import DoctorDashboard from './pages/DoctorDashboard';
 import UploadPage from './pages/UploadPage';
+import ChatPage from './pages/ChatPage';
 import { Box, CircularProgress } from '@mui/material';
 
 import getTheme from './theme';
@@ -76,6 +77,7 @@ function App() {
                 <Route path="/upload" element={userProfile ? <UploadPage /> : <Navigate to="/login" />} />
                 <Route path="/profile" element={userProfile ? <ProfilePage /> : <Navigate to="/login" />} />
                 <Route path="/history" element={userProfile ? <ScanHistoryPage userProfile={userProfile} /> : <Navigate to="/login" />} />
+                <Route path="/chat" element={userProfile ? <ChatPage userProfile={userProfile} /> : <Navigate to="/login" />} />
 
                 <Route path="/login" element={userProfile ? <Navigate to="/dashboard" /> : <LoginPage />} />
                 <Route path="/signup" element={userProfile ? <Navigate to="/dashboard" /> : <SignupPage />} />
