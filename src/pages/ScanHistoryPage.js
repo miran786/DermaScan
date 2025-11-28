@@ -266,7 +266,7 @@ const ScanHistoryPage = ({ userProfile }) => {
                                         )}
 
                                         {scan.doctorNotes && (
-                                            <Box sx={{ mt: 2, p: 1.5, bgcolor: 'grey.50', borderRadius: 2 }}>
+                                            <Box sx={{ mt: 2, p: 1.5, bgcolor: (theme) => theme.palette.mode === 'light' ? 'grey.50' : 'rgba(255, 255, 255, 0.05)', borderRadius: 2 }}>
                                                 <Typography variant="caption" fontWeight="bold" color="primary" display="block" gutterBottom>
                                                     Doctor's Note:
                                                 </Typography>

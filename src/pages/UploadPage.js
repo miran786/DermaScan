@@ -174,7 +174,7 @@ const UploadPage = () => {
                     <Typography variant="h4" fontWeight="bold" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <CheckCircleIcon color="success" fontSize="large" /> Analysis Results
                     </Typography>
-                    <Paper elevation={3} sx={{ p: 4, borderRadius: 4, bgcolor: '#e8f5e9' }}>
+                    <Paper elevation={3} sx={{ p: 4, borderRadius: 4, bgcolor: (theme) => theme.palette.mode === 'light' ? '#e8f5e9' : 'rgba(76, 175, 80, 0.1)' }}>
                         <Stack spacing={2}>
                             <Box display="flex" justifyContent="space-between" alignItems="center">
                                 <Typography variant="h6" color="text.secondary">Prediction:</Typography>
@@ -190,9 +190,9 @@ const UploadPage = () => {
                                     {analysisResult.severity}
                                 </Typography>
                             </Box>
-                            <Box sx={{ mt: 2, p: 2, bgcolor: 'white', borderRadius: 2 }}>
+                            <Box sx={{ mt: 2, p: 2, bgcolor: 'background.paper', borderRadius: 2 }}>
                                 <Typography variant="subtitle2" color="text.secondary" gutterBottom>Recommendation:</Typography>
-                                <Typography variant="body1">{analysisResult.recommendation}</Typography>
+                                <Typography variant="body1" color="text.primary">{analysisResult.recommendation}</Typography>
                             </Box>
                         </Stack>
                     </Paper>
